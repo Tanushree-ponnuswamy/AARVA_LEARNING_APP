@@ -1984,11 +1984,18 @@ function UploadWorkspace({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [summaryData, setSummaryData] = useState<{
+    title?: string;
+    overview?: string;
     summary?: string;
-    chapters?: { chapter?: number; title?: string; summary?: string }[];
+    complete_summary?: string;
+    main_takeaway?: string;
+    chapters?: { chapter?: number; page?: number; title?: string; summary?: string }[];
     key_points?: string[];
+    topics_covered?: string[];
+    important_notes?: (string | { note?: string; text?: string; type?: string; page?: number })[];
     definitions?: { term?: string; definition?: string }[];
-    concepts?: string[];
+    concepts?: (string | { name?: string; explanation?: string; how_it_works?: string; example?: string })[];
+    [key: string]: any;
   } | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [latestRag, setLatestRag] = useState<{
@@ -2979,7 +2986,7 @@ function UploadWorkspace({
                     Topics covered
                   </h3>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                    {topicsCoveredList.map((topic, idx) => (
+                    {topicsCoveredList.map((topic: any, idx: number) => (
                       <button
                         key={idx}
                         type="button"
