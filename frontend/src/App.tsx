@@ -2688,32 +2688,33 @@ function UploadWorkspace({
     }
   };
 
-  // Handle Attach Files
+  // Handle Attach Files - Strictly enforce only one file at a time
   const handleChatFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const newFiles = Array.from(files);
-      setAttachedFiles((prev) => [...prev, ...newFiles]);
-      const primary = newFiles[0];
-      setChatPreviewFile(primary);
-      setChatPreviewUrl(URL.createObjectURL(primary));
+      if (files.length > 1) {
+        alert("Only one document can be uploaded at a time. The first file will be selected.");
+      }
+      const singleFile = files[0];
+      // Revoke any previous preview URL
+      if (chatPreviewUrl) {
+        try { URL.revokeObjectURL(chatPreviewUrl); } catch { /* ignore */ }
+      }
+      setAttachedFiles([singleFile]);
+      setChatPreviewFile(singleFile);
+      setChatPreviewUrl(URL.createObjectURL(singleFile));
       setLeftView("files");
     }
     e.target.value = "";
   };
 
-  const removeAttachedFile = (idxToRemove: number) => {
-    setAttachedFiles((prev) => {
-      const updated = prev.filter((_, idx) => idx !== idxToRemove);
-      if (updated.length > 0) {
-        setChatPreviewFile(updated[0]);
-        setChatPreviewUrl(URL.createObjectURL(updated[0]));
-      } else {
-        setChatPreviewFile(null);
-        setChatPreviewUrl(null);
-      }
-      return updated;
-    });
+  const removeAttachedFile = (_idxToRemove?: number) => {
+    if (chatPreviewUrl) {
+      try { URL.revokeObjectURL(chatPreviewUrl); } catch { /* ignore */ }
+    }
+    setAttachedFiles([]);
+    setChatPreviewFile(null);
+    setChatPreviewUrl(null);
   };
 
   const handleNewChat = () => {
@@ -3430,14 +3431,14 @@ function UploadWorkspace({
                   ref={chatFileInputRef}
                   style={{ display: "none" }}
                   onChange={handleChatFileSelect}
-                  multiple
+                  accept=".pdf,.docx,.doc,.xlsx,.xls,.txt,.md"
                 />
                 <button
                   type="button"
                   className="chat-action-btn attach-btn"
                   onClick={() => chatFileInputRef.current?.click()}
-                  title="Attach images or documents"
-                  aria-label="Attach file"
+                  title="Attach document (single file)"
+                  aria-label="Attach document"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19" />
