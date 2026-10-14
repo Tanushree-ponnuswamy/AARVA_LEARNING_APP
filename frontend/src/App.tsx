@@ -2266,6 +2266,9 @@ function UploadWorkspace({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingFile, setUploadingFile] = useState<File | null>(null);
+  const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
+  const stageTimerRef = useRef<any>(null);
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
@@ -2557,6 +2560,49 @@ function UploadWorkspace({
     setSubFilter("All");
   };
 
+  // ── Cancel In-Progress Upload & Remove File ────────────────────────────────
+  const handleCancelUpload = () => {
+    if (uploadXhrRef.current) {
+      uploadXhrRef.current.abort();
+      uploadXhrRef.current = null;
+    }
+    if (stageTimerRef.current) {
+      clearInterval(stageTimerRef.current);
+      stageTimerRef.current = null;
+    }
+    const cancelledName = uploadingFile?.name || (attachedFiles.length > 0 ? attachedFiles[0].name : "document");
+    setUploading(false);
+    setUploadProgress(0);
+    setUploadingFile(null);
+    setAttachedFiles([]);
+    setChatPreviewFile(null);
+    if (chatPreviewUrl) {
+      try { URL.revokeObjectURL(chatPreviewUrl); } catch { /* ignore */ }
+    }
+    setChatPreviewUrl(null);
+    setUploadError("");
+    setMessages((prev) => [
+      ...prev,
+      {
+        from: "ai",
+        text: `🚫 Ingestion of "${cancelledName}" was cancelled and the file was removed.`,
+      },
+    ]);
+  };
+
+  // ── Remove / Delete Current Textbook from Workspace & DB ──────────────────
+  const handleDeleteCurrentBook = async () => {
+    if (!book?.id) return;
+    if (!confirm(`Are you sure you want to remove "${book.title}" from your library?`)) return;
+    try {
+      await apiFetch(`/api/textbooks/${book.id}`, { method: "DELETE" });
+      onUploaded();
+      handleNewChat();
+    } catch {
+      alert("Failed to delete book.");
+    }
+  };
+
   // ── RAG Chat & Hybrid Retrieval Pipeline ──────────────────────────────────
   const executeRagChat = async (queryText: string, targetBookId: number, targetUserId?: number) => {
     setIsSending(true);
@@ -2617,6 +2663,7 @@ function UploadWorkspace({
   const doUpload = async (file: File, initialQuery?: string) => {
     setUploadError("");
     setUploading(true);
+    setUploadingFile(file);
     setUploadProgress(0);
     const user = (() => { try { return JSON.parse(localStorage.getItem("aarva_user") || "null"); } catch { return null; } })();
     const userId = user?.id || 6;
@@ -2630,6 +2677,7 @@ function UploadWorkspace({
     try {
       const data = await new Promise<any>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
+        uploadXhrRef.current = xhr;
         const token = localStorage.getItem("aarva_token") ?? "";
 
         // Track file upload network transmission (0% - 40%)
@@ -2641,11 +2689,10 @@ function UploadWorkspace({
         };
 
         // Server-side parsing, chunking, vector indexing (45% -> 95%)
-        let stageTimer: any = null;
         xhr.upload.onload = () => {
           setUploadProgress(45);
           let current = 45;
-          stageTimer = setInterval(() => {
+          stageTimerRef.current = setInterval(() => {
             if (current < 92) {
               current += Math.floor(Math.random() * 5) + 3;
               if (current > 95) current = 95;
@@ -2655,7 +2702,11 @@ function UploadWorkspace({
         };
 
         xhr.onload = () => {
-          if (stageTimer) clearInterval(stageTimer);
+          if (stageTimerRef.current) {
+            clearInterval(stageTimerRef.current);
+            stageTimerRef.current = null;
+          }
+          uploadXhrRef.current = null;
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
               resolve(JSON.parse(xhr.responseText));
@@ -2673,8 +2724,21 @@ function UploadWorkspace({
         };
 
         xhr.onerror = () => {
-          if (stageTimer) clearInterval(stageTimer);
+          if (stageTimerRef.current) {
+            clearInterval(stageTimerRef.current);
+            stageTimerRef.current = null;
+          }
+          uploadXhrRef.current = null;
           reject(new Error("Network connection lost during file transmission."));
+        };
+
+        xhr.onabort = () => {
+          if (stageTimerRef.current) {
+            clearInterval(stageTimerRef.current);
+            stageTimerRef.current = null;
+          }
+          uploadXhrRef.current = null;
+          reject(new Error("ABORTED_BY_USER"));
         };
 
         xhr.open("POST", `${API}/api/textbooks/upload`);
@@ -2708,6 +2772,7 @@ function UploadWorkspace({
       ]);
 
       setUploading(false);
+      setUploadingFile(null);
 
       if (initialQuery && initialQuery.trim()) {
         await executeRagChat(initialQuery.trim(), newBook.id, userId);
@@ -2715,6 +2780,10 @@ function UploadWorkspace({
         setActiveTab("Summary");
       }
     } catch (err: unknown) {
+      if (err instanceof Error && err.message === "ABORTED_BY_USER") {
+        // User deliberately cancelled upload and removed the file
+        return;
+      }
       const errMsg = err instanceof Error ? err.message : "Upload failed.";
       setUploadError(errMsg);
       setMessages((c) => [
@@ -2722,6 +2791,7 @@ function UploadWorkspace({
         { from: "ai", text: `⚠️ Upload error: ${errMsg}. Please try again.` },
       ]);
       setUploading(false);
+      setUploadingFile(null);
     } finally {
       setTimeout(() => setUploadProgress(0), 1200);
     }
@@ -2919,6 +2989,21 @@ function UploadWorkspace({
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              {book?.id && (
+                <button
+                  type="button"
+                  className="delete-book-pill-btn"
+                  onClick={handleDeleteCurrentBook}
+                  title="Remove this document from library"
+                  aria-label="Remove document"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  <span>Remove</span>
+                </button>
+              )}
               <button
                 type="button"
                 className="new-chat-pill-btn"
@@ -2938,6 +3023,44 @@ function UploadWorkspace({
           {/* View Mode: Files / Document Viewer */}
           {leftView === "files" && (
             <div className="doc-viewer-wrapper" style={{ height: "calc(100% - 3.4rem)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              {uploading && (
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "0.5rem 1rem",
+                  background: "#fff1f2",
+                  borderBottom: "1px solid #fecdd3",
+                  color: "#9f1239",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  flexShrink: 0
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0, overflow: "hidden" }}>
+                    <span style={{ fontSize: "1rem" }}>⏳</span>
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      Uploading <b>{uploadingFile?.name || "document"}</b> ({uploadProgress}%)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCancelUpload}
+                    style={{
+                      background: "#ffffff",
+                      color: "#e11d48",
+                      border: "1px solid #fda4af",
+                      borderRadius: "6px",
+                      padding: "0.22rem 0.65rem",
+                      fontSize: "0.76rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      flexShrink: 0
+                    }}
+                  >
+                    ✕ Cancel & Remove
+                  </button>
+                </div>
+              )}
               {chatPreviewFile && chatPreviewUrl ? (
                 <FilePreviewPane
                   src={chatPreviewUrl}
@@ -3024,7 +3147,9 @@ function UploadWorkspace({
                         </svg>
                       </div>
                       <div className="cup-title-block">
-                        <span className="cup-title">Ingesting Document</span>
+                        <span className="cup-title">
+                          {uploadingFile ? `Ingesting "${uploadingFile.name}"` : "Ingesting Document"}
+                        </span>
                         <span className="cup-subtitle">
                           {uploadProgress < 40
                             ? "Reading document stream..."
@@ -3037,7 +3162,18 @@ function UploadWorkspace({
                                   : "Finalising knowledge graph..."}
                         </span>
                       </div>
-                      <span className="cup-pct">{uploadProgress}%</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.55rem" }}>
+                        <span className="cup-pct">{uploadProgress}%</span>
+                        <button
+                          type="button"
+                          className="cup-cancel-btn"
+                          onClick={handleCancelUpload}
+                          title="Cancel upload and remove file"
+                          aria-label="Remove uploading file"
+                        >
+                          ✕ Remove
+                        </button>
+                      </div>
                     </div>
 
                     <div className="cup-bar-track">
