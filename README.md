@@ -133,20 +133,83 @@ flowchart TD
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Complete Tech Stack & Libraries
 
-| Layer | Technology | Purpose |
-|---|---|---|
-| **Frontend Framework** | React 19 + TypeScript | High-performance SPA with modern React hooks & state |
-| **Build Tool** | Vite 8 + Tailwind CSS v4 | Fast HMR dev server, instant build, modern CSS utility engine |
-| **Document Preview** | `pdfjs-dist`, `mammoth`, `xlsx` | In-browser client preview for PDF, Word (.docx), and Excel (.xlsx) |
-| **Backend Framework** | FastAPI (Python 3.10+) | Async REST API with OpenAPI documentation (`/docs`) |
-| **Database & ORM** | PostgreSQL / SQLite + SQLAlchemy 2.0 | Users, sessions, textbooks, quizzes, chat history |
-| **Vector Database** | ChromaDB | Local persistent vector store with cosine distance |
-| **Document Ingestion** | PyMuPDF, pdfplumber, python-docx, mammoth, openpyxl, EasyOCR, pytesseract | Text & tabular extraction across PDF, DOCX, XLSX, TXT, and images |
-| **Hybrid Retrieval** | ChromaDB Dense + BM25 (rank-bm25) | Reciprocal Rank Fusion (RRF `k=60`) combining semantic & keyword search |
-| **AI Inference** | Qwen3 8B (primary), Llama 3 / Mistral (fallbacks) via Ollama | Multi-mode summarization, adaptive quiz generation, grounded RAG tutor |
-| **Auth & Security** | JWT (HS256) + Passlib (Bcrypt) + SMTP OTP | Token-based auth, session tracking, email OTP verification |
+### 1. Frontend Technologies & Libraries (`frontend/package.json`)
+
+| Package / Tool | Version | Category | Role in AARVA |
+| :--- | :--- | :--- | :--- |
+| **`react`** | `^19.0.0` | UI Library | Core reactive component tree, custom hooks, and virtual DOM management |
+| **`react-dom`** | `^19.0.0` | DOM Renderer | Browser DOM rendering and root mounting engine |
+| **`typescript`** | `^5.7.0` | Language | Strict static typing for all components, props, state, and API payload schemas |
+| **`vite`** | `^8.0.5` | Build Tool | Lightning-fast development server with Native ESM and Hot Module Replacement (HMR) |
+| **`@vitejs/plugin-react`** | `^6.0.0` | Vite Plugin | React 19 Fast Refresh and JSX runtime transformation |
+| **`tailwindcss`** | `^4.0.0` | Styling Engine | Modern utility-first CSS engine powering glassmorphism, responsive grids, and design tokens |
+| **`@tailwindcss/vite`** | `^4.0.0` | Vite Integration | Zero-configuration direct Tailwind v4 pipeline compilation |
+| **`pdfjs-dist`** | `^6.4.299` | Document Rendering | Mozilla PDF.js engine for client-side rendering of PDF pages onto HTML5 canvas |
+| **`mammoth`** | `^1.13.0` | Document Conversion | Client-side Word `.docx` to HTML converter for instant document previews |
+| **`xlsx` (SheetJS)** | `^0.18.5` | Spreadsheet Engine | In-browser parsing and interactive tabular rendering for `.xlsx` and `.xls` files |
+| **`react-markdown`** | `^10.1.0` | Content Rendering | Structured rendering of AI tutor responses, study guides, and concept cards |
+| **`oxfmt`** | `^0.2.0` | Code Quality | Ultra-fast Rust-based code formatter for TypeScript and CSS |
+| **`Web Speech API`** | Native | Voice AI | Browser-native `SpeechRecognition` (voice input) and `SpeechSynthesis` (audio playback) |
+
+---
+
+### 2. Backend Framework & Data Persistence (`backend/requirements.txt`)
+
+| Library / Engine | Version | Category | Role in AARVA |
+| :--- | :--- | :--- | :--- |
+| **`fastapi`** | `>=0.110.0` | Web Framework | Async REST API router with automated Swagger/OpenAPI documentation (`/docs`) |
+| **`uvicorn`** | `>=0.28.0` | ASGI Server | High-throughput asynchronous server powered by `uvloop` and `httptools` |
+| **`pydantic`** | `>=2.6.0` | Data Validation | Type validation, serialization, and settings parsing for all requests and responses |
+| **`python-multipart`** | `>=0.0.9` | Upload Parser | Streaming parser for multi-megabyte `multipart/form-data` document uploads |
+| **`sqlalchemy`** | `>=2.0.28` | ORM | SQLAlchemy 2.0 declarative database modeling for users, textbooks, quizzes, and chat |
+| **`psycopg2-binary`** | `>=2.9.9` | DB Driver | C-optimized PostgreSQL database driver for production persistence |
+| **`pg8000`** | `>=1.31.0` | DB Driver | Pure-Python PostgreSQL driver fallback for environments without C compilers |
+| **`sqlite3`** | Built-in | DB Engine | Zero-configuration local database (`sqlite:///./aarva.db`) for lightweight development |
+| **`python-jose[crypto]`** | `>=3.3.0` | Auth & Tokens | JSON Web Token (JWT) generation, HS256 signing, and Bearer token verification |
+| **`passlib[bcrypt]`** | `>=1.7.4` | Security | 12-round salted bcrypt password hashing and credential verification |
+| **`requests`** | `>=2.31.0` | HTTP Client | Communicates with the local Ollama daemon for LLM chat and embedding generation |
+| **`smtplib` / `email`** | Built-in | Email & SMTP | Secure TLS email dispatch via Gmail SMTP for 4-digit verification OTPs and resets |
+
+---
+
+### 3. Vector Database & Hybrid Retrieval Engine
+
+| Technology | Category | Role in AARVA |
+| :--- | :--- | :--- |
+| **`chromadb` (`>=0.4.24`)** | Dense Vector Store | Persistent local vector store (`./chroma_db`) indexing 1024-dim dense embeddings with cosine similarity |
+| **`rank-bm25` (`>=0.2.2`)** | Sparse Lexical Index | Okapi BM25 implementation for high-speed keyword retrieval from parsed document chunks |
+| **Reciprocal Rank Fusion (RRF)** | Hybrid RAG Algorithm | Merges dense vector results (`0.65`) and sparse BM25 results (`0.35`) with constant `k=60` for accurate context |
+| **Semantic Chunker** | Document Processing | Custom paragraph-aware chunker with 120-character overlap for semantic continuity |
+
+---
+
+### 4. Document Parsers & Multi-Modal OCR
+
+| Library | Version | File Types | Purpose |
+| :--- | :--- | :--- | :--- |
+| **`PyMuPDF` (`fitz`)** | `>=1.24.0` | `.pdf` | Ultra-fast C-backed text extraction, page counting, and metadata extraction |
+| **`pdfplumber`** | `>=0.11.0` | `.pdf` | Layout-aware fallback for multi-column pages and structured tables |
+| **`python-docx`** | `>=1.1.0` | `.docx` | Paragraph, heading hierarchy, bullet list, and tabular data extraction |
+| **`mammoth`** | `>=1.6.0` | `.docx`, `.doc` | Clean semantic HTML conversion for Microsoft Word documents |
+| **`openpyxl`** | `>=3.1.2` | `.xlsx`, `.xls` | Reads Excel sheets and formats tabular data into structured markdown for RAG |
+| **`chardet`** | `>=5.2.0` | `.txt`, `.md`, `.csv` | Universal character encoding detector (UTF-8, Latin-1, Windows-1252) |
+| **`Pillow`** | `>=10.3.0` | Images | Image loading, resizing, grayscale conversion, and contrast enhancement |
+| **`pytesseract`** | `>=0.3.10` | Images | Wrapper for Google Tesseract OCR engine for text extraction from images |
+| **`easyocr`** | `>=1.7.1` | Images | Standalone deep learning OCR supporting 80+ languages without external binaries |
+
+---
+
+### 5. AI Models & Inference Runtime
+
+| Model / Runtime | Type | Provider | Role in AARVA |
+| :--- | :--- | :--- | :--- |
+| **`Ollama`** | Inference Engine | Local Host (`:11434`) | Runs local open-source LLMs privately with zero external API fees |
+| **`qwen3:8b`** | Primary LLM | Ollama | Multi-mode summarization, interactive RAG tutor chat, and quiz generation |
+| **`llama3` / `mistral`** | Fallback LLMs | Ollama | Automatic secondary models if the primary model is unavailable |
+| **`bge-large:latest`** | Embedding Model | Ollama | Generates 1024-dimensional dense semantic vectors for ChromaDB indexing |
+
 
 ---
 
