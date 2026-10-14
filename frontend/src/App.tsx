@@ -3172,21 +3172,6 @@ function UploadWorkspace({
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              {book?.id && (
-                <button
-                  type="button"
-                  className="delete-book-pill-btn"
-                  onClick={handleDeleteCurrentBook}
-                  title="Remove this document from library"
-                  aria-label="Remove document"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                  <span>Remove</span>
-                </button>
-              )}
               <button
                 type="button"
                 className="new-chat-pill-btn"
@@ -3211,16 +3196,16 @@ function UploadWorkspace({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  padding: "0.5rem 1rem",
+                  padding: "0.3rem 0.8rem",
                   background: "#fff1f2",
                   borderBottom: "1px solid #fecdd3",
                   color: "#9f1239",
-                  fontSize: "0.82rem",
+                  fontSize: "0.76rem",
                   fontWeight: 600,
                   flexShrink: 0
                 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0, overflow: "hidden" }}>
-                    <span style={{ fontSize: "1rem" }}>⏳</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", minWidth: 0, overflow: "hidden" }}>
+                    <span style={{ fontSize: "0.85rem" }}>⏳</span>
                     <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       Uploading <b>{uploadingFile?.name || "document"}</b> ({uploadProgress}%)
                     </span>
@@ -3232,15 +3217,16 @@ function UploadWorkspace({
                       background: "#ffffff",
                       color: "#e11d48",
                       border: "1px solid #fda4af",
-                      borderRadius: "6px",
-                      padding: "0.22rem 0.65rem",
-                      fontSize: "0.76rem",
+                      borderRadius: "999px",
+                      padding: "0.15rem 0.55rem",
+                      fontSize: "0.7rem",
                       fontWeight: 700,
                       cursor: "pointer",
                       flexShrink: 0
                     }}
+                    title="Cancel upload and remove file"
                   >
-                    ✕ Cancel & Remove
+                    ✕ Remove
                   </button>
                 </div>
               )}
@@ -3269,18 +3255,36 @@ function UploadWorkspace({
                   onPageChange={setCurrentPage}
                 />
               ) : (
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1.2rem", padding: "2.5rem 1.5rem", textAlign: "center" }}>
-                  <div style={{ width: "4rem", height: "4rem", borderRadius: "1.2rem", background: "linear-gradient(135deg, rgba(116,88,245,0.1), rgba(0,153,255,0.08))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.9rem", boxShadow: "0 4px 16px rgba(116,88,245,0.12)" }}>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.85rem", padding: "1.25rem 1rem", textAlign: "center" }}>
+                  <div style={{ width: "2.6rem", height: "2.6rem", borderRadius: "0.85rem", background: "linear-gradient(135deg, rgba(116,88,245,0.12), rgba(0,153,255,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem", boxShadow: "0 2px 10px rgba(116,88,245,0.12)" }}>
                     📂
                   </div>
-                  <div style={{ maxWidth: "300px" }}>
-                    <h4 style={{ margin: "0 0 0.4rem 0", color: "var(--ink)", fontWeight: 700, fontSize: "1rem" }}>No file uploaded yet</h4>
-                    <p style={{ margin: "0 0 1rem 0", fontSize: "0.83rem", color: "var(--ink-soft)", lineHeight: 1.55 }}>
-                      Upload a PDF, Word, or Excel file using the <b>+</b> button in the chat, or select a textbook from your library.
+                  <div style={{ maxWidth: "260px" }}>
+                    <h4 style={{ margin: "0 0 0.25rem 0", color: "var(--ink)", fontWeight: 700, fontSize: "0.92rem" }}>No file uploaded yet</h4>
+                    <p style={{ margin: "0 0 0.75rem 0", fontSize: "0.76rem", color: "var(--ink-soft)", lineHeight: 1.5 }}>
+                      Upload a PDF, Word, or Excel file using <b>+</b> in chat or browse below.
                     </p>
-                    <p style={{ margin: 0, fontSize: "0.75rem", color: "#a0a0b8" }}>
-                      Once uploaded, the file preview will appear here with "Files <span style={{ background: "#7458f5", color: "#fff", borderRadius: "999px", padding: "0 5px", fontSize: "0.68rem", fontWeight: 700 }}>1</span>" badge active.
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => chatFileInputRef.current?.click()}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.35rem",
+                        padding: "0.32rem 0.85rem",
+                        fontSize: "0.76rem",
+                        fontWeight: 600,
+                        color: "#7458f5",
+                        background: "#f4f0ff",
+                        border: "1px solid #ddd3fb",
+                        borderRadius: "999px",
+                        cursor: "pointer",
+                        transition: "all 0.18s ease"
+                      }}
+                    >
+                      <span>+</span>
+                      <span>Browse Document</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -3389,7 +3393,7 @@ function UploadWorkspace({
               )}
 
               {/* Quick Prompt Suggestion Chips */}
-              <div style={{ display: "flex", gap: "0.4rem", padding: "0.35rem 0.8rem", overflowX: "auto", background: "#ffffff", borderTop: "1px solid #f1f5f9" }}>
+              <div style={{ display: "flex", gap: "0.3rem", padding: "0.25rem 0.75rem", overflowX: "auto", background: "#ffffff", borderTop: "1px solid #f1f5f9" }}>
                 {[
                   "Explain this simply",
                   "What is the main idea?",
@@ -3401,8 +3405,8 @@ function UploadWorkspace({
                     type="button"
                     onClick={() => handleChipClick(chip)}
                     style={{
-                      padding: "0.25rem 0.65rem",
-                      fontSize: "0.75rem",
+                      padding: "0.18rem 0.55rem",
+                      fontSize: "0.7rem",
                       fontWeight: 600,
                       color: "#6366f1",
                       background: "#f5f3ff",
@@ -3534,16 +3538,16 @@ function UploadWorkspace({
 
           {/* ── EMPTY STATE: fills full pane height when no book is loaded ── */}
           {!book && !summaryData && (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1.25rem", textAlign: "center", padding: "2.5rem" }}>
-              <div style={{ width: "80px", height: "80px", borderRadius: "22px", background: "#ede9fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="34" height="34" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.85rem", textAlign: "center", padding: "1.5rem" }}>
+              <div style={{ width: "52px", height: "52px", borderRadius: "14px", background: "#ede9fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path d="M12 2 C12 2 12.8 7.2 14.5 9.5 C16.8 11.2 22 12 22 12 C22 12 16.8 12.8 14.5 14.5 C12.8 16.8 12 22 12 22 C12 22 11.2 16.8 9.5 14.5 C7.2 12.8 2 12 2 12 C2 12 7.2 11.2 9.5 9.5 C11.2 7.2 12 2 12 2Z" fill="#6366f1"/>
                 </svg>
               </div>
               <div>
-                <h3 style={{ margin: "0 0 0.6rem", fontSize: "1.2rem", fontWeight: 700, color: "#1e293b", letterSpacing: "-0.01em" }}>Analysis coming soon</h3>
-                <p style={{ margin: 0, fontSize: "0.875rem", color: "#64748b", lineHeight: 1.7, maxWidth: "280px" }}>
-                  AI-generated summaries, chapter breakdowns, key concepts, definitions, and revision notes will be displayed here once your document is processed.
+                <h3 style={{ margin: "0 0 0.35rem", fontSize: "1rem", fontWeight: 700, color: "#1e293b", letterSpacing: "-0.01em" }}>Analysis coming soon</h3>
+                <p style={{ margin: 0, fontSize: "0.78rem", color: "#64748b", lineHeight: 1.5, maxWidth: "260px" }}>
+                  AI-generated summaries, chapter breakdowns, key concepts, and revision notes will appear here once processed.
                 </p>
               </div>
             </div>
