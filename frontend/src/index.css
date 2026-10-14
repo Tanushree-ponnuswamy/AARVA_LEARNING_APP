@@ -2839,41 +2839,120 @@ form button:hover {
   background: rgba(116, 88, 245, 0.08);
 }
 
-.demo-login-bar {
+.demo-accounts-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.75rem 0.85rem;
+  border: 1.5px dashed #c8bfeb;
+  border-radius: 0.95rem;
+  background: linear-gradient(135deg, rgba(247, 245, 254, 0.95), rgba(240, 246, 255, 0.95));
+  margin-bottom: 0.5rem;
+}
+
+.demo-accounts-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.65rem 0.9rem;
-  border: 1.5px dashed #d5d0e3;
-  border-radius: 0.85rem;
-  background: #f9f8fe;
-  margin-bottom: 0.3rem;
 }
 
-.demo-login-bar span {
-  font-size: 0.78rem;
+.demo-accounts-header span {
+  font-size: 0.76rem;
   color: var(--ink-soft);
-  font-weight: 500;
-}
-
-.demo-login-btn {
-  border: 1.5px solid var(--violet);
-  background: rgba(116, 88, 245, 0.08);
-  color: var(--violet-deep);
   font-weight: 700;
-  font-size: 0.75rem;
-  padding: 0.35rem 0.75rem;
-  border-radius: 0.65rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.demo-login-btn:hover {
-  background: var(--violet-deep);
-  color: white;
-  border-color: var(--violet-deep);
-  transform: translateY(-1px);
+.demo-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.45rem;
 }
+
+@media (max-width: 640px) {
+  .demo-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.demo-card-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(116, 88, 245, 0.22);
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 6px rgba(116, 88, 245, 0.05);
+}
+
+.demo-card-item:hover {
+  border-color: var(--violet);
+  background: #fbf9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(116, 88, 245, 0.15);
+}
+
+.demo-card-item.loading {
+  opacity: 0.7;
+  pointer-events: none;
+  border-color: var(--violet);
+}
+
+.demo-card-item b {
+  font-size: 0.82rem;
+  color: var(--ink-deep);
+  font-weight: 700;
+  margin-top: 0.2rem;
+  line-height: 1.15;
+}
+
+.demo-card-item small {
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.demo-card-item .demo-hint {
+  font-size: 0.64rem;
+  color: var(--violet-deep);
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.demo-badge {
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
+.demo-badge.college {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
+.demo-badge.school {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+}
+
+.demo-badge.professional {
+  background: rgba(139, 92, 246, 0.12);
+  color: #6d28d9;
+}
+
 
 .text-button,
 .resend-button {

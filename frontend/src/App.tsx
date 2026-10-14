@@ -670,13 +670,52 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [forgotMsg, setForgotMsg] = useState("");
+  const [activeDemoLoading, setActiveDemoLoading] = useState<string | null>(null);
 
-  const fillDemoCredentials = () => {
-    setLoginEmail("student@college.edu");
-    setLoginPassword("student123");
+  const loginDemoAccount = async (persona: "college" | "school" | "professional") => {
     setLoginError("");
     setForgotMsg("");
+    setLoginLoading(true);
+    setActiveDemoLoading(persona);
+    try {
+      const data = await apiPost("/api/auth/demo-login", { persona });
+      localStorage.setItem("aarva_token", data.access_token);
+      localStorage.setItem("aarva_user", JSON.stringify(data.user));
+      localStorage.removeItem("aarva_active_book_id");
+      onComplete(data.user.name);
+    } catch (err: unknown) {
+      // Fallback direct login via regular /api/auth/login
+      const personaEmailMap = {
+        college: "student@college.edu",
+        school: "priya.patel@school.edu",
+        professional: "rohan.iyer@techcorp.com",
+      };
+      const email = personaEmailMap[persona];
+      setLoginEmail(email);
+      setLoginPassword("student123");
+      try {
+        const loginData = await apiPost("/api/auth/login", {
+          email,
+          password: "student123",
+          portal: "student",
+        });
+        localStorage.setItem("aarva_token", loginData.access_token);
+        localStorage.setItem("aarva_user", JSON.stringify(loginData.user));
+        localStorage.removeItem("aarva_active_book_id");
+        onComplete(loginData.user.name);
+      } catch (e: unknown) {
+        setLoginError(e instanceof Error ? e.message : "Failed to sign into demo account.");
+      }
+    } finally {
+      setLoginLoading(false);
+      setActiveDemoLoading(null);
+    }
   };
+
+  const fillDemoCredentials = () => {
+    loginDemoAccount("college");
+  };
+
 
   // ── forgot password state ─────────────────────────────────────────────
   const [forgotEmail, setForgotEmail] = useState("");
@@ -890,6 +929,7 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
       // Store JWT in localStorage for session persistence
       localStorage.setItem("aarva_token", data.access_token);
       localStorage.setItem("aarva_user", JSON.stringify(data.user));
+      localStorage.removeItem("aarva_active_book_id");
       onComplete(data.user.name);
     } catch (err: unknown) {
       setLoginError(err instanceof Error ? err.message : "Invalid login credentials.");
@@ -1031,12 +1071,14 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
       });
       localStorage.setItem("aarva_token", data.access_token);
       localStorage.setItem("aarva_user", JSON.stringify(data.user));
+      localStorage.removeItem("aarva_active_book_id");
       setSuccessName(data.user.name);
       setStage("success");
     } catch (err: unknown) {
       if (enteredCode === expectedCode || enteredCode === "2468") {
         // Fallback demo signup completion
         const fallbackName = signupName || "Student";
+        localStorage.removeItem("aarva_active_book_id");
         setSuccessName(fallbackName);
         setStage("success");
       } else {
@@ -1071,11 +1113,51 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
               <h2>Continue your learning journey.</h2>
               <p className="auth-subtitle">Sign in with your student account to pick up exactly where you left off.</p>
 
-              <div className="demo-login-bar">
-                <span>Want to test quickly?</span>
-                <button type="button" className="demo-login-btn" onClick={fillDemoCredentials}>
-                  Auto-fill Demo Account
-                </button>
+              <div className="demo-accounts-container">
+                <div className="demo-accounts-header">
+                  <span>⚡ Instant Demo Login (Click to Sign In):</span>
+                  <button type="button" className="text-button" onClick={fillDemoCredentials}>
+                    Auto-fill Form
+                  </button>
+                </div>
+                <div className="demo-cards-grid">
+                  <button
+                    type="button"
+                    className={`demo-card-item ${activeDemoLoading === "college" ? "loading" : ""}`}
+                    onClick={() => loginDemoAccount("college")}
+                    disabled={loginLoading}
+                    title="Click to sign in instantly as Alex Morgan (College Student - IIT Madras)"
+                  >
+                    <span className="demo-badge college">College</span>
+                    <b>Alex Morgan</b>
+                    <small>student@college.edu</small>
+                    <span className="demo-hint">{activeDemoLoading === "college" ? "Logging in…" : "IIT Madras • Networking →"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`demo-card-item ${activeDemoLoading === "school" ? "loading" : ""}`}
+                    onClick={() => loginDemoAccount("school")}
+                    disabled={loginLoading}
+                    title="Click to sign in instantly as Priya Patel (School Student - Class 11)"
+                  >
+                    <span className="demo-badge school">School</span>
+                    <b>Priya Patel</b>
+                    <small>priya.patel@school.edu</small>
+                    <span className="demo-hint">{activeDemoLoading === "school" ? "Logging in…" : "Class 11 • Physics →"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`demo-card-item ${activeDemoLoading === "professional" ? "loading" : ""}`}
+                    onClick={() => loginDemoAccount("professional")}
+                    disabled={loginLoading}
+                    title="Click to sign in instantly as Rohan Iyer (Senior Cloud Solutions Architect)"
+                  >
+                    <span className="demo-badge professional">Professional</span>
+                    <b>Rohan Iyer</b>
+                    <small>rohan.iyer@techcorp.com</small>
+                    <span className="demo-hint">{activeDemoLoading === "professional" ? "Logging in…" : "Cloud • Microservices →"}</span>
+                  </button>
+                </div>
               </div>
 
               <form className="auth-form" id="login-form" onSubmit={submitLogin}>
@@ -1091,6 +1173,7 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
                     required
                   />
                 </label>
+
                 <label>
                   Password
                   <div className="password-input-wrap">
@@ -4954,8 +5037,57 @@ function TestView({
   );
 }
 
-function ProfileView({ name, email, bookCount }: { name: string; email: string; bookCount: number }) {
-  const firstName = name.split(" ")[0] || "there";
+interface StoredUserData {
+  id?: number;
+  name?: string;
+  email?: string;
+  role?: string;
+  learner_type?: string;
+  institution?: string;
+  department?: string;
+  year?: string;
+  semester?: string;
+  board?: string;
+  class_grade?: string;
+  job_role?: string;
+  industry?: string;
+  goals?: string[];
+  subjects?: string[];
+  personal_interests?: string[];
+  streak_days?: number;
+  completed_topics?: number;
+  quiz_scores_avg?: number;
+}
+
+function ProfileView({ name, email, bookCount, user }: { name: string; email: string; bookCount: number; user?: StoredUserData | null }) {
+  const firstName = (user?.name || name).split(" ")[0] || "there";
+  const fullName = user?.name || name;
+  const userEmailAddress = user?.email || email;
+  const learnerType = user?.learner_type || "college";
+  const streak = user?.streak_days || (learnerType === "school" ? 8 : learnerType === "professional" ? 5 : 12);
+  const accuracy = user?.quiz_scores_avg ? Math.round(user.quiz_scores_avg) : (learnerType === "school" ? 84 : learnerType === "professional" ? 92 : 88);
+
+  const educationLevelDisplay =
+    learnerType === "school" ? "High School (CBSE)"
+      : learnerType === "professional" ? "Working Professional & Enterprise"
+        : "Undergraduate Degree";
+
+  const fieldDisplay =
+    user?.department || user?.job_role || (learnerType === "school" ? user?.class_grade || "Class 11 Science" : learnerType === "professional" ? "Senior Cloud Solutions Architect" : "Computer Science & Engineering");
+
+  const institutionDisplay =
+    user?.institution || (learnerType === "school" ? "Delhi Public School, R.K. Puram" : learnerType === "professional" ? "TechCorp Cloud Solutions" : "Indian Institute of Technology, Madras");
+
+  const goalsDisplay =
+    user?.goals && user.goals.length > 0 ? user.goals.join(" • ") : "30 minutes daily focused learning";
+
+  const interestsDisplay =
+    user?.personal_interests && user.personal_interests.length > 0
+      ? user.personal_interests.join(", ")
+      : user?.subjects && user.subjects.length > 0
+        ? user.subjects.join(", ")
+        : "AI, Software Architecture, System Design";
+
   const heatmap = Array.from({ length: 161 }, (_, index) => {
     // Show activity only for the first 63 days, rest empty
     if (index < 63) {
@@ -4968,7 +5100,15 @@ function ProfileView({ name, email, bookCount }: { name: string; email: string; 
     <section className="profile-view">
       <article className="profile-hero-card">
         <div className="profile-avatar-large">{firstName[0]}</div>
-        <div className="profile-identity"><p className="kicker">Learner profile</p><h2>{name}</h2><span>Curious learner · Member since {new Date().toLocaleString("default", { month: "long", year: "numeric" })}</span><div><em>{bookCount * 80} points</em><em>{bookCount > 0 ? `${bookCount} book${bookCount > 1 ? "s" : ""}` : "No books yet"}</em></div></div>
+        <div className="profile-identity">
+          <p className="kicker">Learner profile ({educationLevelDisplay})</p>
+          <h2>{fullName}</h2>
+          <span>{institutionDisplay} · Active {streak}-day study streak</span>
+          <div>
+            <em>{bookCount * 80 + streak * 20} points</em>
+            <em>{bookCount > 0 ? `${bookCount} textbook${bookCount > 1 ? "s" : ""}` : "No textbooks uploaded"}</em>
+          </div>
+        </div>
         <button type="button">Edit profile</button>
       </article>
 
@@ -4976,28 +5116,28 @@ function ProfileView({ name, email, bookCount }: { name: string; email: string; 
         <article className="detail-card">
           <div className="detail-card-title"><span>P</span><div><p className="kicker">About you</p><h3>Personal details</h3></div><button type="button">Edit</button></div>
           <dl>
-            <div><dt>Full name</dt><dd>{name}</dd></div>
-            <div><dt>Email address</dt><dd>{email || `${firstName.toLowerCase()}@college.edu`}</dd></div>
-            <div><dt>Learning goal</dt><dd>30 minutes daily</dd></div>
+            <div><dt>Full name</dt><dd>{fullName}</dd></div>
+            <div><dt>Email address</dt><dd>{userEmailAddress}</dd></div>
+            <div><dt>Primary goal</dt><dd>{goalsDisplay}</dd></div>
+            <div><dt>Study streak</dt><dd>{streak} consecutive days</dd></div>
           </dl>
         </article>
 
         <article className="detail-card">
-          <div className="detail-card-title"><span>E</span><div><p className="kicker">Learning background</p><h3>Education</h3></div><button type="button">Edit</button></div>
+          <div className="detail-card-title"><span>E</span><div><p className="kicker">Learning background</p><h3>Education & Role</h3></div><button type="button">Edit</button></div>
           <dl>
-            <div><dt>Education level</dt><dd>Undergraduate</dd></div>
-            <div><dt>Field of study</dt><dd>Computer Science</dd></div>
-            <div><dt>Institution</dt><dd>Technology Institute</dd></div>
-            <div><dt>Graduation year</dt><dd>2027</dd></div>
-            <div><dt>Interests</dt><dd>AI, Design, Psychology</dd></div>
+            <div><dt>Learner category</dt><dd>{educationLevelDisplay}</dd></div>
+            <div><dt>Field / Domain</dt><dd>{fieldDisplay}</dd></div>
+            <div><dt>Organization</dt><dd>{institutionDisplay}</dd></div>
+            <div><dt>Interests</dt><dd>{interestsDisplay}</dd></div>
           </dl>
         </article>
 
         <aside className="profile-highlights">
           <p className="kicker">This month</p><h3>Learning highlights</h3>
-          <div><span><MiniIcon name="clock" /></span><p><b>34.5 hours</b><small>Focused learning</small></p></div>
-          <div><span><MiniIcon name="book" /></span><p><b>6 books</b><small>Actively studied</small></p></div>
-          <div><span><MiniIcon name="test" /></span><p><b>87% accuracy</b><small>Across 12 tests</small></p></div>
+          <div><span><MiniIcon name="clock" /></span><p><b>{streak * 3.2} hours</b><small>Focused learning</small></p></div>
+          <div><span><MiniIcon name="book" /></span><p><b>{bookCount} books</b><small>In personal library</small></p></div>
+          <div><span><MiniIcon name="test" /></span><p><b>{accuracy}% accuracy</b><small>Across completed quizzes</small></p></div>
           <blockquote>“A little progress each day adds up to remarkable results.”</blockquote>
         </aside>
       </div>
@@ -5021,7 +5161,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: () =
   return <button className={`setting-toggle ${checked ? "on" : ""}`} type="button" role="switch" aria-checked={checked} aria-label={label} onClick={onChange}><span /></button>;
 }
 
-function SettingsView({ name, email }: { name: string; email: string }) {
+function SettingsView({ name, email, user }: { name: string; email: string; user?: StoredUserData | null }) {
   const [section, setSection] = useState("Learning");
   const [settings, setSettings] = useState({
     daily: true,
@@ -5035,6 +5175,8 @@ function SettingsView({ name, email }: { name: string; email: string }) {
   });
   const [saved, setSaved] = useState(false);
   const update = (key: keyof typeof settings) => setSettings((current) => ({ ...current, [key]: !current[key] }));
+  const displayName = user?.name || name;
+  const displayEmail = user?.email || email;
 
   return (
     <section className="settings-view">
@@ -5045,7 +5187,7 @@ function SettingsView({ name, email }: { name: string; email: string }) {
         </nav>
 
         <div className="settings-panels">
-          {section === "Account" && <article className="settings-card"><div className="settings-card-heading"><div><h3>Account information</h3><p>Update the details connected to your Aarva account.</p></div><span className="settings-avatar">{name[0]}</span></div><div className="settings-fields"><label>Full name<input defaultValue={name} /></label><label>Email address<input type="email" defaultValue={email || `${name.split(" ")[0].toLowerCase()}@college.edu`} /></label><label>Current password<input type="password" placeholder="Enter current password" /></label><label>New password<input type="password" placeholder="Create a new password" /></label></div><div className="danger-zone"><div><b>Delete account</b><small>Permanently remove your profile and learning data.</small></div><button type="button">Delete account</button></div></article>}
+          {section === "Account" && <article className="settings-card"><div className="settings-card-heading"><div><h3>Account information</h3><p>Update the details connected to your Aarva account.</p></div><span className="settings-avatar">{displayName[0]}</span></div><div className="settings-fields"><label>Full name<input defaultValue={displayName} key={`name_${displayName}`} /></label><label>Email address<input type="email" defaultValue={displayEmail || `${displayName.split(" ")[0].toLowerCase()}@college.edu`} key={`email_${displayEmail}`} /></label><label>Current password<input type="password" placeholder="Enter current password" /></label><label>New password<input type="password" placeholder="Create a new password" /></label></div><div className="danger-zone"><div><b>Delete account</b><small>Permanently remove your profile and learning data.</small></div><button type="button">Delete account</button></div></article>}
 
           {section === "Learning" && <><article className="settings-card"><div className="settings-card-heading"><div><h3>Learning preferences</h3><p>Personalize your goals and the way recommendations are created.</p></div></div><div className="settings-fields"><label>Daily study goal<select defaultValue="30 minutes"><option>15 minutes</option><option>30 minutes</option><option>1 hour</option><option>2+ hours</option></select></label><label>Preferred study time<select defaultValue="Evening"><option>Morning</option><option>Afternoon</option><option>Evening</option></select></label><label>Question difficulty<select defaultValue="Adaptive"><option>Easy</option><option>Intermediate</option><option>Advanced</option><option>Adaptive</option></select></label><label>Weekly target<select defaultValue="5 days"><option>3 days</option><option>5 days</option><option>Every day</option></select></label></div></article><article className="settings-card"><div className="settings-card-heading"><div><h3>Smart learning</h3><p>Choose how Aarva supports your progress.</p></div></div><div className="setting-list"><div><span><b>Personalized recommendations</b><small>Suggest books and concepts based on your activity.</small></span><Toggle checked={settings.recommendations} onChange={() => update("recommendations")} label="Personalized recommendations" /></div><div><span><b>Study streaks</b><small>Keep track of consecutive learning days.</small></span><Toggle checked={settings.streaks} onChange={() => update("streaks")} label="Study streaks" /></div><div><span><b>Answer sounds</b><small>Play subtle feedback sounds during tests.</small></span><Toggle checked={settings.sounds} onChange={() => update("sounds")} label="Answer sounds" /></div></div></article></>}
 
@@ -5061,12 +5203,18 @@ function SettingsView({ name, email }: { name: string; email: string }) {
 }
 
 function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
+  // Read the stored user object once — used for user-specific data throughout
+  const storedUser: StoredUserData | null = (() => { try { return JSON.parse(localStorage.getItem("aarva_user") || "null"); } catch { return null; } })();
+  const userId = storedUser?.id;
+  const userEmail: string = storedUser?.email || "";
+
   const [collapsed, setCollapsed] = useState(false);
   const [active, setActive] = useState("Dashboard");
   const [selectedBook, setSelectedBook] = useState<LearningBook | null>(null);
   const [startedTests, setStartedTests] = useState<Set<number>>(() => {
     try {
-      const saved = localStorage.getItem("aarva_started_tests");
+      const key = userId ? `aarva_started_tests_${userId}` : "aarva_started_tests";
+      const saved = localStorage.getItem(key);
       return saved ? new Set(JSON.parse(saved)) : new Set();
     } catch {
       return new Set();
@@ -5074,7 +5222,8 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
   });
   const [completedTests, setCompletedTests] = useState<Set<number>>(() => {
     try {
-      const saved = localStorage.getItem("aarva_completed_tests");
+      const key = userId ? `aarva_completed_tests_${userId}` : "aarva_completed_tests";
+      const saved = localStorage.getItem(key);
       return saved ? new Set(JSON.parse(saved)) : new Set();
     } catch {
       return new Set();
@@ -5082,12 +5231,13 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
   });
   const [books, setBooks] = useState<LearningBook[]>([]);
   const [booksLoading, setBooksLoading] = useState(true);
-  const firstName = name.split(" ")[0] || "there";
+  const firstName = (storedUser?.name || name).split(" ")[0] || "there";
 
   const handleStartTest = (b: LearningBook) => {
     setStartedTests((prev) => {
       const next = new Set(prev).add(b.id);
-      try { localStorage.setItem("aarva_started_tests", JSON.stringify([...next])); } catch {}
+      const key = userId ? `aarva_started_tests_${userId}` : "aarva_started_tests";
+      try { localStorage.setItem(key, JSON.stringify([...next])); } catch {}
       return next;
     });
   };
@@ -5095,14 +5245,11 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
   const handleCompleteTest = (b: LearningBook) => {
     setCompletedTests((prev) => {
       const next = new Set(prev).add(b.id);
-      try { localStorage.setItem("aarva_completed_tests", JSON.stringify([...next])); } catch {}
+      const key = userId ? `aarva_completed_tests_${userId}` : "aarva_completed_tests";
+      try { localStorage.setItem(key, JSON.stringify([...next])); } catch {}
       return next;
     });
   };
-
-  // Read the stored user object once — used for user-specific data throughout
-  const storedUser = (() => { try { return JSON.parse(localStorage.getItem("aarva_user") || "null"); } catch { return null; } })();
-  const userEmail: string = storedUser?.email || "";
 
   // ── Study Plan & Task Management ──
   const [showAddTask, setShowAddTask] = useState(false);
@@ -5110,9 +5257,8 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
   const [newTaskDuration, setNewTaskDuration] = useState("30 min");
   const [customTasks, setCustomTasks] = useState<StudyTask[]>(() => {
     try {
-      const uId = storedUser?.id;
-      if (!uId) return [];
-      const saved = localStorage.getItem(`aarva_tasks_${uId}`);
+      if (!userId) return [];
+      const saved = localStorage.getItem(`aarva_tasks_${userId}`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -5131,8 +5277,8 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
     };
     setCustomTasks((prev) => {
       const updated = [newTask, ...prev];
-      if (storedUser?.id) {
-        try { localStorage.setItem(`aarva_tasks_${storedUser.id}`, JSON.stringify(updated)); } catch {}
+      if (userId) {
+        try { localStorage.setItem(`aarva_tasks_${userId}`, JSON.stringify(updated)); } catch {}
       }
       return updated;
     });
@@ -5143,8 +5289,8 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
   const handleToggleTask = (taskId: string) => {
     setCustomTasks((prev) => {
       const updated = prev.map((t) => (t.id === taskId ? { ...t, completed: !t.completed } : t));
-      if (storedUser?.id) {
-        try { localStorage.setItem(`aarva_tasks_${storedUser.id}`, JSON.stringify(updated)); } catch {}
+      if (userId) {
+        try { localStorage.setItem(`aarva_tasks_${userId}`, JSON.stringify(updated)); } catch {}
       }
       return updated;
     });
@@ -5154,8 +5300,8 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
     e.stopPropagation();
     setCustomTasks((prev) => {
       const updated = prev.filter((t) => t.id !== taskId);
-      if (storedUser?.id) {
-        try { localStorage.setItem(`aarva_tasks_${storedUser.id}`, JSON.stringify(updated)); } catch {}
+      if (userId) {
+        try { localStorage.setItem(`aarva_tasks_${userId}`, JSON.stringify(updated)); } catch {}
       }
       return updated;
     });
@@ -5163,7 +5309,6 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
 
   // ── Load books from API ──────────────────────────────────────────────────
   const loadBooks = async () => {
-    const userId = storedUser?.id;
     if (!userId) { setBooksLoading(false); return; } // no user → empty library
     setBooksLoading(true);
     try {
@@ -5171,12 +5316,13 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
       const colored = data.map((b, i) => ({ ...b, color: COVER_COLORS[i % COVER_COLORS.length], concepts: ["Key Concepts", "Core Ideas", "Definitions", "Important Notes"] }));
       setBooks(colored);
 
-      const storedBookId = localStorage.getItem("aarva_active_book_id");
+      const activeKey = `aarva_active_book_id_${userId}`;
+      const storedBookId = localStorage.getItem(activeKey) || localStorage.getItem("aarva_active_book_id");
       if (colored.length > 0) {
         setSelectedBook((prev) => {
           if (prev) {
             const updated = colored.find((b) => b.id === prev.id);
-            return updated || prev;
+            if (updated) return updated;
           }
           if (storedBookId) {
             const found = colored.find((b) => String(b.id) === storedBookId);
@@ -5184,23 +5330,26 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
           }
           return colored[0];
         });
+      } else {
+        setSelectedBook(null);
       }
     } catch { /* quietly fail */ }
     setBooksLoading(false);
   };
 
-  useEffect(() => { loadBooks(); }, []);
+  useEffect(() => { loadBooks(); }, [userId]);
 
   const selectBookAndSave = (b: LearningBook | null) => {
     setSelectedBook(b);
-    if (b?.id) {
-      localStorage.setItem("aarva_active_book_id", String(b.id));
+    if (b?.id && userId) {
+      localStorage.setItem(`aarva_active_book_id_${userId}`, String(b.id));
     }
   };
 
   const openBook = (book: LearningBook) => { selectBookAndSave(book); setActive("Upload"); };
   const startTest = (book: LearningBook) => { selectBookAndSave(book); handleStartTest(book); setActive("Tests"); };
   const goUpload = () => { setActive("Upload"); };
+
 
   return (
     <div className={`dashboard-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
@@ -5462,8 +5611,8 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
             onSelectBook={selectBookAndSave}
           />
         )}
-        {active === "Settings" && <SettingsView name={name} email={userEmail} />}
-        {active === "Profile" && <ProfileView name={name} email={userEmail} bookCount={books.length} />}
+        {active === "Settings" && <SettingsView name={name} email={userEmail} user={storedUser} />}
+        {active === "Profile" && <ProfileView name={name} email={userEmail} bookCount={books.length} user={storedUser} />}
       </main>
     </div>
   );
@@ -5507,6 +5656,7 @@ export default function App() {
     }
     localStorage.removeItem("aarva_token");
     localStorage.removeItem("aarva_user");
+    localStorage.removeItem("aarva_active_book_id");
     navigate("landing");
   };
 
@@ -5528,6 +5678,16 @@ export default function App() {
   }, []);
 
   if (route === "auth") return <AuthPage onHome={() => navigate("landing")} onComplete={(name) => { setUserName(name); navigate("dashboard"); }} />;
-  if (route === "dashboard") return <Dashboard name={userName} onHome={handleLogout} />;
+  if (route === "dashboard") {
+    const activeUserKey = (() => {
+      try {
+        const u = JSON.parse(localStorage.getItem("aarva_user") || "null");
+        return u?.id ? `user_${u.id}` : (u?.email || userName || "student");
+      } catch {
+        return userName || "student";
+      }
+    })();
+    return <Dashboard key={activeUserKey} name={userName} onHome={handleLogout} />;
+  }
   return <LandingPage onStart={() => navigate("auth")} onLogin={handleLoginNav} />;
 }
