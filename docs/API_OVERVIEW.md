@@ -1,176 +1,187 @@
 # API Documentation – AARVA Backend
 
-The **AARVA** backend provides a RESTful API built on **FastAPI**. All JSON responses follow consistent schemas and secured endpoints are protected via **JWT Bearer Authentication** (except public auth, demo accounts, health checks, and OTP verification flows).
+The **AARVA** backend provides a RESTful API built on **FastAPI**. All JSON responses follow consistent schemas.
 
-- **Swagger Interactive OpenAPI Docs**: `http://127.0.0.1:8000/docs`
-- **ReDoc Interactive Documentation**: `http://127.0.0.1:8000/redoc`
+- **Swagger Interactive Docs**: `http://127.0.0.1:8000/docs`
+- **ReDoc**: `http://127.0.0.1:8000/redoc`
 
 ---
 
-## 1. Authentication & Session Endpoints (`/api/auth`)
+## 1. Authentication & Session (`/api/auth`)
 
-| Method | Path | Description | Auth Required |
-|---|---|---|---|
-| `POST` | `/api/auth/send-otp` | Generate and dispatch 4-digit email verification OTP via SMTP | None |
-| `POST` | `/api/auth/verify-otp` | Validate submitted OTP code for registration or password reset | None |
-| `POST` | `/api/auth/reset-password` | Verify reset OTP and update account password | None |
-| `POST` | `/api/auth/signup` | Register new student (all 4 personas) and issue JWT token | None |
-| `POST` | `/api/auth/login` | Student / Admin login with email & password | None |
-| `GET` | `/api/auth/me` | Fetch authenticated user's profile, interests, and progress | Bearer Token |
-| `POST` | `/api/auth/logout` | Revoke active user session in database | Bearer Token |
-| `GET` | `/api/auth/sessions` | List active device sessions for authenticated user | Bearer Token |
-| `GET` | `/api/auth/chat-sessions` | List student chat sessions and conversation history | Bearer Token |
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/auth/send-otp` | Generate and dispatch a 4-digit email verification OTP via SMTP |
+| `POST` | `/api/auth/verify-otp` | Validate a submitted OTP code |
+| `POST` | `/api/auth/reset-password` | Verify OTP and update account password; auto-login on success |
+| `POST` | `/api/auth/signup` | Register a new student (personal info + preferences + OTP verified) |
+| `POST` | `/api/auth/login` | Student login with email & password — returns JWT |
+| `GET` | `/api/auth/me` | Fetch authenticated user's profile and progress (Bearer Token) |
+| `POST` | `/api/auth/logout` | Revoke all active `UserSession` rows for the user (Bearer Token) |
+| `GET` | `/api/auth/sessions` | List active login sessions for the current user (Bearer Token) |
+| `GET` | `/api/auth/chat-sessions` | List all chat sessions for the current user (Bearer Token) |
 
 ---
 
 ## 2. Textbooks & Document Ingestion (`/api/textbooks`)
 
-Supports multi-format ingestion: **PDF (`.pdf`), Word (`.docx`), Excel spreadsheets (`.xlsx`), and plain text (`.txt`)**.
+Supported formats: **PDF, DOCX, DOC, XLSX, TXT, MD, CSV, RST, and images (OCR via EasyOCR/pytesseract)**.
 
-| Method | Path | Description | Auth Required |
-|---|---|---|---|
-| `GET` | `/api/textbooks/` | List all textbooks & documents uploaded by current user | Optional (scoped by `user_id` query param or Bearer) |
-| `POST` | `/api/textbooks/upload` | Upload document, extract text, chunk and index in ChromaDB | Optional (associates with `user_id`) |
-| `GET` | `/api/textbooks/{textbook_id}/file` | Stream uploaded document with appropriate `Content-Type` for in-browser viewing | None |
-| `DELETE` | `/api/textbooks/{textbook_id}` | Delete document, metadata, and associated ChromaDB embeddings | Optional |
-
----
-
-## 3. Document Summarization & RAG AI Chat (`/api/summary`, `/api/chat`)
-
-| Method | Path | Description | Auth Required |
-|---|---|---|---|
-| `GET` | `/api/summary/{textbook_id}` | Retrieve pre-computed or generated 5-tier hierarchical summary (Complete, Chapter, Concepts, Glossary, Notes) | None |
-| `GET` | `/api/summary/chat/history/{textbook_id}` | Retrieve persistent chat message history for a document | None |
-| `POST` | `/api/summary/chat` | Query AI Tutor via Hybrid RAG (Chroma dense + BM25 sparse) with exact citations | None |
-| `POST` | `/api/chat` | Direct top-level alias for Hybrid RAG AI Tutor Chat | None |
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/textbooks/` | List all documents uploaded by a user (scoped by `user_id` query param) |
+| `POST` | `/api/textbooks/upload` | Upload a document, extract text, chunk, embed in ChromaDB, store metadata |
+| `GET` | `/api/textbooks/{textbook_id}/file` | Stream the raw uploaded file with correct `Content-Type` for browser preview |
+| `DELETE` | `/api/textbooks/{textbook_id}` | Delete record, ChromaDB vector chunks, and file from disk |
 
 ---
 
-## 4. 3-Tier Adaptive Quiz Engine (`/api/quiz`)
+## 3. Document Summarization & RAG Chat (`/api/summary`, `/api/chat`)
 
-| Method | Path | Description | Auth Required |
-|---|---|---|---|
-| `POST` | `/api/quiz/generate` | Generate dynamic practice questions for a document | None |
-| `GET` | `/api/quiz/{textbook_id}` | Retrieve 3-tier adaptive practice challenge (Basic, Medium, Advanced) | None |
-| `POST` | `/api/quiz/submit` | Grade answers, calculate percentage, award XP, update streak, and provide AI feedback on incorrect answers | None |
-| `GET` | `/api/quiz/leaderboard/top` | Retrieve top students by XP and level rankings | None |
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/summary/{textbook_id}` | Retrieve summary in one of 4 modes: `complete`, `chapter`, `concept`, `page` |
+| `GET` | `/api/summary/chat/history/{textbook_id}` | Retrieve persisted chat message history for a document |
+| `POST` | `/api/summary/chat` | Query AI Tutor via Hybrid RAG (Chroma dense + BM25 sparse + RRF) |
+| `POST` | `/api/chat` | Direct alias for `POST /api/summary/chat` |
 
----
+### Summary Modes (`GET /api/summary/{textbook_id}?mode=...`)
 
-## 5. Student Dashboard & Study Tasks (`/api/students`)
-
-| Method | Path | Description | Auth Required |
-|---|---|---|---|
-| `GET` | `/api/students/dashboard/{user_id}` | Fetch student dashboard metrics, streaks, active tasks, and recent tests | None |
-| `POST` | `/api/students/award-xp` | Award XP, increment levels, and update learning progress milestones | None |
-| `PUT` | `/api/students/preferences/{user_id}` | Update accessibility and learning preferences (TTS, STT, font size, language) | None |
-
----
-
-## 6. Admin Portal Endpoints (`/api/admin`)
-
-| Method | Path | Description | Auth Required |
-|---|---|---|---|
-| `GET` | `/api/admin/metrics` | System telemetry (total students, active sessions, documents, average quiz score) | Admin Role |
-| `GET` | `/api/admin/students` | Paginated and persona-filtered roster of enrolled students | Admin Role |
-| `GET` | `/api/admin/students/{student_id}` | Deep inspection of profile, uploaded documents, and login audits | Admin Role |
-| `POST` | `/api/admin/students/{student_id}/toggle-status` | Toggle student account status (`is_active: true/false`) | Admin Role |
+| Mode | Behaviour |
+|---|---|
+| `complete` | Returns overview, key points, topics covered, chapters, concepts, definitions, and important notes |
+| `chapter` | Per-chapter breakdown (uses stored `summary_data.chapters` or LLM generation) |
+| `concept` | AI-generated concept deep-dive |
+| `page` | AI-generated page-level summary |
 
 ---
 
-## 7. System & Health Endpoints
+## 4. Quiz Engine (`/api/quiz`)
 
-| Method | Path | Description | Auth Required |
-|---|---|---|---|
-| `GET` | `/` | System root and platform metadata | None |
-| `GET` | `/api/health` | Health check verifying database and vector store readiness | None |
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/quiz/generate` | Generate quiz questions via Hybrid RAG + LLM (falls back to static bank if Ollama unavailable) |
+| `GET` | `/api/quiz/{textbook_id}` | Retrieve the static fallback question set |
+| `POST` | `/api/quiz/submit` | Grade answers, award XP, unlock badges, return performance feedback |
+| `GET` | `/api/quiz/leaderboard/top` | Top 10 students by XP from `LearningProgress` |
 
----
-
-## 8. Sample Request & Response Payloads
-
-### A. Reset Password (`POST /api/auth/reset-password`)
-**Request:**
-```json
-{
-  "email": "student@college.edu",
-  "otp": "4821",
-  "new_password": "newSecurePassword123"
-}
-```
-**Response (`200 OK`):**
-```json
-{
-  "success": true,
-  "message": "Password reset successfully. You can now log in with your new password."
-}
-```
-
-### B. Hybrid RAG AI Tutor Chat (`POST /api/chat`)
-**Request:**
+### Quiz Generate Request
 ```json
 {
   "textbook_id": 1,
-  "query": "What is the difference between TCP slow start and congestion avoidance?",
-  "language": "English",
-  "conversation_history": [
-    {"role": "user", "content": "Hello!"},
-    {"role": "assistant", "content": "Hello Alex! How can I help you with Computer Networks today?"}
-  ]
-}
-```
-**Response (`200 OK`):**
-```json
-{
-  "answer": "TCP Slow Start increases the congestion window exponentially (doubling every RTT) until the Slow Start Threshold (ssthresh) is reached. Once ssthresh is surpassed, TCP enters Congestion Avoidance, increasing the window additively (by 1 MSS per RTT) to probe network capacity gently.",
-  "citations": [
-    {
-      "chapter": "Chapter 3: Transport Layer",
-      "page": 42,
-      "snippet": "During slow start, cwnd begins at 1 MSS and increments by 1 MSS for every acknowledged segment..."
-    }
-  ],
-  "suggested_followups": [
-    "How does Fast Retransmit work in TCP Reno?",
-    "What triggers a transition back to Slow Start?"
-  ]
+  "topic": "Transport Layer",
+  "num_questions": 5,
+  "difficulty": "mixed"
 }
 ```
 
-### C. Quiz Submission & AI Remediation (`POST /api/quiz/submit`)
-**Request:**
+### Quiz Submit Request
 ```json
 {
-  "user_id": 7,
+  "user_id": 1,
   "textbook_id": 1,
   "topic": "Transport Layer Protocols",
-  "score": 4,
-  "total_questions": 5,
   "answers": [
-    {"question_id": 1, "selected": "B", "correct": "B"},
-    {"question_id": 2, "selected": "A", "correct": "C"}
+    {"question_id": 1, "selected_option": 1, "is_correct": true},
+    {"question_id": 2, "selected_option": 0, "is_correct": false}
   ]
 }
 ```
-**Response (`200 OK`):**
+
+### Quiz Submit Response
 ```json
 {
   "success": true,
   "score": 4,
   "total": 5,
   "percentage": 80.0,
-  "xp_awarded": 40,
-  "new_xp": 280,
-  "streak_days": 13,
-  "remediation": [
-    {
-      "question_id": 2,
-      "concept": "Three-Way Handshake",
-      "explanation": "SYN-ACK is sent by the server in step 2, not ACK alone.",
-      "ai_discussion_prompt": "Explain step 2 of the TCP 3-way handshake in detail."
-    }
+  "passed": true,
+  "xp_earned": 65,
+  "feedback": "Great work! You have a solid grasp. Review the explanation for any missed questions.",
+  "new_badges_unlocked": [],
+  "new_badge_unlocked": null
+}
+```
+
+---
+
+## 5. Student Dashboard (`/api/student`)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/student/dashboard/{user_id}` | Dashboard stats: textbook count, quiz history, XP, level, adaptive insights, badges |
+| `POST` | `/api/student/award-xp` | Award XP and update level/title in `LearningProgress` |
+| `PUT` | `/api/student/preferences/{user_id}` | Update learning preferences (TTS, STT, larger text, language) |
+
+---
+
+## 6. Admin Portal (`/api/admin`)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/metrics` | Total registered users + active sessions count (last 4 hours) |
+| `GET` | `/api/admin/students` | All users — searchable by name/email, filterable by learner type |
+| `GET` | `/api/admin/students/{student_id}` | Full profile + login activity log (last 10 entries) |
+| `POST` | `/api/admin/students/{student_id}/toggle-status` | Toggle `is_active` for a student account |
+
+---
+
+## 7. System & Health
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/` | Root — returns system status and portal metadata |
+| `GET` | `/api/health` | Health check — confirms database and ChromaDB are ready |
+
+---
+
+## 8. Sample Payloads
+
+### Hybrid RAG Chat (`POST /api/chat`)
+**Request:**
+```json
+{
+  "textbook_id": 1,
+  "query": "Explain the difference between TCP slow start and congestion avoidance.",
+  "language": "English",
+  "conversation_history": [
+    {"role": "user", "content": "Hello!"},
+    {"role": "assistant", "content": "Hello! How can I help you?"}
   ]
+}
+```
+**Response:**
+```json
+{
+  "response": "TCP Slow Start doubles the congestion window each RTT until ssthresh is reached...",
+  "sources": [
+    {"chunk_id": "...", "page": 42, "chapter": "Chapter 3: Transport Layer", "text": "..."}
+  ]
+}
+```
+
+### Reset Password (`POST /api/auth/reset-password`)
+**Request:**
+```json
+{
+  "email": "student@college.edu",
+  "code": "4821",
+  "new_password": "newSecurePassword123"
+}
+```
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Password reset successfully.",
+  "access_token": "<jwt>",
+  "user": {
+    "id": 1,
+    "name": "Alex Morgan",
+    "email": "student@college.edu",
+    "role": "student",
+    "learner_type": "college"
+  }
 }
 ```
 
