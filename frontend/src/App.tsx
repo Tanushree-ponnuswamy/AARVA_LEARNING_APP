@@ -1629,6 +1629,7 @@ function PdfJsViewer({
   const [fitWidth, setFitWidth] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [fallbackText, setFallbackText] = useState<string | null>(null);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -1653,6 +1654,7 @@ function PdfJsViewer({
     let isCancelled = false;
     setLoading(true);
     setError(null);
+    setFallbackText(null);
 
     const loadPdfDoc = async () => {
       try {
@@ -1674,6 +1676,24 @@ function PdfJsViewer({
         }
 
         if (isCancelled) return;
+
+        // Check if file is a valid PDF (%PDF magic bytes)
+        const isPdfMagic =
+          uint8Data.length >= 4 &&
+          uint8Data[0] === 0x25 &&
+          uint8Data[1] === 0x50 &&
+          uint8Data[2] === 0x44 &&
+          uint8Data[3] === 0x46;
+
+        if (!isPdfMagic) {
+          // If server returned text or markdown fallback, decode and display cleanly
+          const text = new TextDecoder().decode(uint8Data);
+          if (text && text.trim().length > 0) {
+            setFallbackText(text);
+            setLoading(false);
+            return;
+          }
+        }
 
         const loadingTask = pdfjsLib.getDocument({
           data: uint8Data,
@@ -1844,7 +1864,7 @@ function PdfJsViewer({
       </div>
 
       {/* 2. PDF Viewer Charcoal Toolbar */}
-      {!error && (
+      {!error && !fallbackText && (
         <div className="pdf-viewer-subtoolbar" style={{
         height: "2.4rem",
         background: "#18181b",
@@ -1940,14 +1960,14 @@ function PdfJsViewer({
         className="pdf-canvas-scroll-container"
         style={{
           flex: 1,
-          height: "calc(100% - 5.25rem)",
+          height: fallbackText ? "calc(100% - 2.85rem)" : "calc(100% - 5.25rem)",
           overflowY: "auto",
           overflowX: "auto",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          padding: "1.5rem 1rem",
-          background: "#525659",
+          padding: fallbackText ? "1.5rem" : "1.5rem 1rem",
+          background: fallbackText ? "#f1f5f9" : "#525659",
           position: "relative"
         }}
       >
@@ -1972,7 +1992,29 @@ function PdfJsViewer({
           </div>
         )}
 
-        {!loading && !error && (
+        {!loading && !error && fallbackText && (
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "820px",
+              margin: "0 auto",
+              background: "#ffffff",
+              padding: "2.25rem 2.5rem",
+              borderRadius: "8px",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+              color: "#1e293b",
+              fontFamily: "Calibri, 'Segoe UI', Arial, sans-serif",
+              fontSize: "0.95rem",
+              lineHeight: 1.7,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word"
+            }}
+          >
+            {fallbackText}
+          </div>
+        )}
+
+        {!loading && !error && !fallbackText && (
           <div
             className="pdf-page-wrapper"
             style={{

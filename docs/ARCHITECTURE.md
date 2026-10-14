@@ -8,52 +8,54 @@
 
 ```mermaid
 flowchart TB
-    subgraph Client ["Frontend (React 19 + TypeScript + Vite — single App.tsx SPA)"]
-        Landing["Landing Page (Hero, Features, About, Contact)"]
-        AuthPage["Auth Page (Login / 3-Step Signup / Forgot Password)"]
-        UploadWS["Upload Workspace (PDF Viewer + AI Tutor Chat + Summarizer)"]
-        LibraryV["Library View (Book Grid)"]
-        TestsV["Tests View (Quiz Engine)"]
+    subgraph Client ["Frontend (React 19 + TypeScript + Vite)"]
+        Landing["Landing Page"]
+        AuthPage["Auth (Login / Signup / Reset)"]
+        UploadWS["Upload Workspace (Document Viewer + AI Tutor Chat + Summarizer)"]
+        LibraryV["Library View (Document Grid)"]
+        TestsV["Tests View (Adaptive Quiz Engine)"]
         ProfileSettings["Profile & Settings"]
-        StudyTasks["Study Task Planner (localStorage per user)"]
-        FetchClient["Fetch API Gateway Client"]
+        StudyTasks["Study Task Planner"]
+        FetchClient["Fetch API Client"]
     end
 
     subgraph BackendGateway ["FastAPI Application Gateway (:8000)"]
         CORSMiddleware["CORS & Request Middleware"]
-        AuthRouter["/api/auth (JWT, OTP, Sessions, Reset Password)"]
-        StudentRouter["/api/student (Dashboard, XP Award, Preferences)"]
-        TextbookRouter["/api/textbooks (Multi-Format Upload, Stream, Delete)"]
-        SummaryRouter["/api/summary (5-Mode Summarizer & Chat History)"]
-        ChatRouter["/api/chat (Hybrid RAG AI Tutor — alias for /api/summary/chat)"]
-        QuizRouter["/api/quiz (Generate, Submit, Leaderboard)"]
-        AdminRouter["/api/admin (Metrics, Student Roster, Status Toggle)"]
+        AuthRouter["/api/auth (JWT, OTP, Sessions)"]
+        StudentRouter["/api/student (Dashboard, Preferences)"]
+        TextbookRouter["/api/textbooks (Upload, Stream, Delete)"]
+        SummaryRouter["/api/summary (5-Mode Summarizer)"]
+        ChatRouter["/api/chat (Hybrid RAG AI Tutor)"]
+        QuizRouter["/api/quiz (Questions, Submit, XP)"]
+        AdminRouter["/api/admin (Metrics, Student Roster)"]
     end
 
     subgraph AIServices ["AI Intelligence & Retrieval Tier"]
-        DocParser["Multi-Format Document Parser\n(pypdf, python-docx, openpyxl)"]
-        SemanticChunker["Semantic Paragraph Chunker (Overlap & Boundary Detection)"]
-        BM25Engine["Sparse BM25 Lexical Search Index"]
-        ChromaService["ChromaDB Dense Embedding Engine (1024-dim Cosine)"]
-        RRFCombiner["Reciprocal Rank Fusion (RRF) Hybrid Merger (k=60)"]
-        LLMService["AI Engine (Qwen3 8B Primary, Llama 3 & Mistral Fallbacks)"]
-        AdaptiveEngine["Adaptive Engine (Difficulty Calibration & Remediation)"]
+        DocParser["Multi-Format Parser (PDF, DOCX, XLSX, TXT, OCR)"]
+        SemanticChunker["Semantic Paragraph Chunker (Overlap 120 chars)"]
+        BM25Engine["Sparse BM25 Lexical Index"]
+        ChromaService["ChromaDB Dense Embedding Engine (1024-dim)"]
+        RRFCombiner["Reciprocal Rank Fusion (RRF k=60)"]
+        LLMService["AI Engine (Qwen3 8B Primary, Llama3/Mistral Fallback)"]
+        AdaptiveEngine["Adaptive Quiz Engine"]
     end
 
     subgraph DataPersistence ["Storage & Persistence Tier"]
-        PostgresDB[("PostgreSQL / SQLite Database\n- Users & Credentials (Bcrypt)\n- Student Profiles & Personas\n- Learning Preferences & UI Settings\n- Progress, Streaks & XP Levels\n- Active User Sessions (token_jti)\n- Quiz Submissions & Leaderboards\n- Chat Sessions & Threaded Messages")]
-        ChromaStore[("ChromaDB Vector Store\n- Semantic Text Chunk Embeddings\n- Document & Chapter Metadata\n- Cosine Distance Collections")]
-        DocStorage["Local Storage (/uploads)\n- Preserved Raw Documents for Streaming"]
+        PostgresDB[("PostgreSQL / SQLite Database")]
+        ChromaStore[("ChromaDB Vector Store")]
+        DocStorage["Local Storage (/uploads)"]
     end
 
-    %% Client to Backend Gateway
-    UI --> ApiClient
-    DocViewer --> ApiClient
-    VoiceSTT --> ApiClient
-    LangContext --> UI
-    TaskPlanner --> ApiClient
-    QuizModule --> ApiClient
-    ApiClient --> CORSMiddleware
+    %% Client Interactions
+    Landing --> AuthPage
+    AuthPage --> FetchClient
+    UploadWS --> FetchClient
+    LibraryV --> FetchClient
+    TestsV --> FetchClient
+    ProfileSettings --> FetchClient
+    StudyTasks --> FetchClient
+
+    FetchClient --> CORSMiddleware
     
     CORSMiddleware --> AuthRouter
     CORSMiddleware --> StudentRouter
@@ -63,13 +65,14 @@ flowchart TB
     CORSMiddleware --> QuizRouter
     CORSMiddleware --> AdminRouter
 
-    %% Gateway to Services
+    %% Gateway to Ingestion & Processing
     TextbookRouter --> DocParser
     DocParser --> DocStorage
     DocParser --> SemanticChunker
     SemanticChunker --> ChromaService
     SemanticChunker --> BM25Engine
 
+    %% Hybrid Retrieval & AI
     ChatRouter --> RRFCombiner
     RRFCombiner --> ChromaService
     RRFCombiner --> BM25Engine
@@ -79,7 +82,7 @@ flowchart TB
     QuizRouter --> AdaptiveEngine
     AdaptiveEngine --> LLMService
 
-    %% Services to Persistence
+    %% Persistence
     ChromaService --> ChromaStore
     AuthRouter --> PostgresDB
     AdminRouter --> PostgresDB
@@ -149,8 +152,9 @@ sequenceDiagram
     Student->>ChatUI: Ask question (Voice input or typed text)
     ChatUI->>API: POST /api/chat { textbook_id, query, language, history }
     API->>RRF: Request hybrid retrieval for query
-    par Parallel Search
+    par Dense Vector Search
         RRF->>Chroma: Dense embedding similarity query (Top-K)
+    and Sparse Lexical Search
         RRF->>BM25: Sparse keyword lexical search (Top-K)
     end
     Chroma-->>RRF: Dense ranked candidates
@@ -232,7 +236,7 @@ sequenceDiagram
 | **ASGI Server** | **Uvicorn** | Asynchronous Server | High-throughput server running on `uvloop` and `httptools` |
 | **Database & ORM** | **PostgreSQL / SQLite** + **SQLAlchemy 2.0** | Relational DB & ORM | Persistent storage for users, sessions, textbooks, quizzes, and chat messages |
 | **Vector Store** | **ChromaDB** | Embedded Vector Database | Persistent local vector store (`./chroma_db`) with cosine distance indexing |
-| **Retrieval Architecture**| **Hybrid RAG (Dense + BM25 + RRF)** | Retrieval Engine | Reciprocal Rank Fusion (`k=60`) merging ChromaDB vector search + BM25 lexical search |
+| **Retrieval Architecture** | **Hybrid RAG (Dense + BM25 + RRF)** | Retrieval Engine | Reciprocal Rank Fusion (`k=60`) merging ChromaDB vector search + BM25 lexical search |
 | **LLM Inference Engine** | **Ollama** | Local AI Host | Local model execution engine (`http://localhost:11434`) with zero API cost |
 | **Large Language Models** | **Qwen3 8B**, **Llama 3**, **Mistral** | Generative AI | Multi-turn AI tutor chat, 5-mode summarization, and adaptive quiz generation |
 | **Embedding Model** | **BGE-Large** (`bge-large:latest`) | Dense Semantic Embedding | 1024-dimensional dense semantic vectors for ChromaDB indexing |
