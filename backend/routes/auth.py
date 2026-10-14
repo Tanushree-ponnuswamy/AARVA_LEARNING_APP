@@ -19,6 +19,11 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 class SendOtpRequest(BaseModel):
     email: str
     length: Optional[int] = 4
+    purpose: Optional[str] = None  # "forgot_password" | "signup" | None
+    require_registered: Optional[bool] = False
+
+class CheckEmailRequest(BaseModel):
+    email: str
 
 class VerifyOtpRequest(BaseModel):
     email: str
@@ -106,12 +111,47 @@ def _user_to_dict(user: User) -> dict:
 
 # ── OTP Email Dispatch & Verification ─────────────────────────────────────
 
+@router.post("/check-email")
+def check_email_registered(req: CheckEmailRequest, db: Session = Depends(get_db)):
+    """Check if an email is registered in the system before sending verification code."""
+    email = req.email.strip().lower()
+    user = db.query(User).filter(User.email == email).first()
+    return {
+        "email": email,
+        "is_registered": bool(user),
+        "name": user.name if user else None,
+        "role": user.role if user else None,
+        "learner_type": user.profile.learner_type if user and user.profile else None,
+    }
+
+
 @router.post("/send-otp")
-def send_verification_otp(req: SendOtpRequest):
-    """Generate a 4-digit verification code and dispatch real email via SMTP."""
+def send_verification_otp(req: SendOtpRequest, db: Session = Depends(get_db)):
+    """
+    Generate a 4-digit verification code and dispatch real email via SMTP.
+    If require_registered is True or purpose == 'forgot_password', verifies that
+    the account is already registered before dispatching the code.
+    """
     email = req.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="Please provide a valid email address.")
+
+    user = db.query(User).filter(User.email == email).first()
+
+    # Pre-check: if attempting forgot password or require_registered is specified
+    if req.purpose == "forgot_password" or req.require_registered:
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="This email address is not registered. Please verify your email address or create a new account."
+            )
+
+    # Pre-check: if attempting signup
+    if req.purpose == "signup" and user:
+        raise HTTPException(
+            status_code=400,
+            detail="An account is already registered with this email. Please sign in instead."
+        )
 
     code = email_service.generate_otp(email, length=req.length or 4)
     dispatch_result = email_service.send_verification_email(email, code)
@@ -120,7 +160,8 @@ def send_verification_otp(req: SendOtpRequest):
         "status": "success" if dispatch_result.get("success") else "dispatched_with_fallback",
         "email": email,
         "message": dispatch_result.get("message", "Verification code dispatched."),
-        "preview_code": code  # Available for development / test flows
+        "preview_code": code,  # Available for development / test flows
+        "is_registered": bool(user)
     }
 
 

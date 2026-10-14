@@ -739,16 +739,32 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
     if (targetEmail && targetEmail.includes("@")) {
       setForgotEmail(targetEmail);
       setForgotLoading(true);
-      setStage("forgot-verify");
       try {
-        const data = await apiPost("/api/auth/send-otp", { email: targetEmail, length: 4 });
+        // Pre-check if account is registered before dispatching verification code
+        const check = await apiPost("/api/auth/check-email", { email: targetEmail });
+        if (!check.is_registered) {
+          setForgotEmail(targetEmail);
+          setStage("forgot-email");
+          setForgotError("This account is not registered. Please check your email or create an account.");
+          setForgotLoading(false);
+          return;
+        }
+
+        const data = await apiPost("/api/auth/send-otp", {
+          email: targetEmail,
+          length: 4,
+          purpose: "forgot_password",
+        });
         if (data.preview_code) {
           setExpectedCode(data.preview_code);
         }
+        setStage("forgot-verify");
         setForgotResendStatus(`Verification code sent to ${targetEmail}`);
         setTimeout(() => setForgotResendStatus(""), 6000);
       } catch (err: unknown) {
-        setForgotError(err instanceof Error ? err.message : "Could not send verification email.");
+        setForgotEmail(targetEmail);
+        setStage("forgot-email");
+        setForgotError(err instanceof Error ? err.message : "This account is not registered.");
       } finally {
         setForgotLoading(false);
       }
@@ -768,7 +784,19 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
     setForgotError("");
     setForgotLoading(true);
     try {
-      const data = await apiPost("/api/auth/send-otp", { email: targetEmail, length: 4 });
+      // Pre-check if account is registered before dispatching verification code
+      const check = await apiPost("/api/auth/check-email", { email: targetEmail });
+      if (!check.is_registered) {
+        setForgotError("This account is not registered. Please check your email or create an account.");
+        setForgotLoading(false);
+        return;
+      }
+
+      const data = await apiPost("/api/auth/send-otp", {
+        email: targetEmail,
+        length: 4,
+        purpose: "forgot_password",
+      });
       if (data.preview_code) {
         setExpectedCode(data.preview_code);
       }
@@ -776,7 +804,7 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
       setForgotResendStatus(`Verification code sent to ${targetEmail}`);
       setTimeout(() => setForgotResendStatus(""), 6000);
     } catch (err: unknown) {
-      setForgotError(err instanceof Error ? err.message : "Could not dispatch verification email.");
+      setForgotError(err instanceof Error ? err.message : "This account is not registered.");
     } finally {
       setForgotLoading(false);
     }
@@ -822,7 +850,11 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
     }
     setForgotResendStatus(`Sending new verification code to ${targetEmail}…`);
     try {
-      const data = await apiPost("/api/auth/send-otp", { email: targetEmail, length: 4 });
+      const data = await apiPost("/api/auth/send-otp", {
+        email: targetEmail,
+        length: 4,
+        purpose: "forgot_password",
+      });
       if (data.preview_code) {
         setExpectedCode(data.preview_code);
       }
@@ -833,6 +865,7 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
       setTimeout(() => setForgotResendStatus(""), 5000);
     }
   };
+
 
   const submitResetPassword = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -939,7 +972,7 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
   };
 
   // ── SIGNUP step 1 → step 2 (Personal → Preferences) ───────────────────
-  const submitPersonal = (event: FormEvent<HTMLFormElement>) => {
+  const submitPersonal = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSignupError("");
     const email = signupEmail.trim();
@@ -947,7 +980,21 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
       setSignupError("Please provide a valid email address to receive your verification code.");
       return;
     }
-    setStage("signup-preferences");
+    setSignupLoading(true);
+    try {
+      // Check if email is already registered before proceeding
+      const check = await apiPost("/api/auth/check-email", { email });
+      if (check.is_registered) {
+        setSignupError("An account is already registered with this email. Please sign in instead.");
+        setSignupLoading(false);
+        return;
+      }
+      setStage("signup-preferences");
+    } catch {
+      setStage("signup-preferences");
+    } finally {
+      setSignupLoading(false);
+    }
   };
 
   // ── SIGNUP step 2 → step 3 (Preferences → Email Verification) ────────
@@ -962,18 +1009,25 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
       return;
     }
 
-    setStage("signup-verify");
-
-    // Automatically dispatch actual OTP verification email to the user's specific email address
+    setSignupLoading(true);
     try {
-      const data = await apiPost("/api/auth/send-otp", { email: targetEmail, length: 4 });
+      // Dispatch OTP verification email with purpose: signup
+      const data = await apiPost("/api/auth/send-otp", {
+        email: targetEmail,
+        length: 4,
+        purpose: "signup",
+      });
       if (data.preview_code) {
         setExpectedCode(data.preview_code);
       }
+      setStage("signup-verify");
       setResendStatus(`Verification code sent to ${targetEmail}`);
       setTimeout(() => setResendStatus(""), 5000);
     } catch (err: unknown) {
-      console.warn("Could not dispatch via SMTP, preview code active:", err);
+      setSignupError(err instanceof Error ? err.message : "Could not send verification email.");
+      setStage("signup-personal");
+    } finally {
+      setSignupLoading(false);
     }
   };
 
@@ -1020,7 +1074,11 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
     }
     setResendStatus(`Sending verification email to ${targetEmail}…`);
     try {
-      const data = await apiPost("/api/auth/send-otp", { email: targetEmail, length: 4 });
+      const data = await apiPost("/api/auth/send-otp", {
+        email: targetEmail,
+        length: 4,
+        purpose: "signup",
+      });
       if (data.preview_code) {
         setExpectedCode(data.preview_code);
       }
