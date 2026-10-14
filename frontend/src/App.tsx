@@ -2702,8 +2702,15 @@ function UploadWorkspace({
     }
   };
 
-  // Handle Attach Files - Strictly enforce only one file at a time
+  // Handle Attach Files - Strictly enforce only one file per chat session
   const handleChatFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // If a document has already been uploaded or attached in this session
+    if (book?.id || attachedFiles.length > 0 || uploadingFile || chatPreviewFile) {
+      alert("Only one file per chat session can be uploaded. Click \"+ New\" at the top to start a fresh chat session for a new document.");
+      e.target.value = "";
+      return;
+    }
+
     const files = e.target.files;
     if (files && files.length > 0) {
       if (files.length > 1) {
@@ -3450,9 +3457,19 @@ function UploadWorkspace({
                 <button
                   type="button"
                   className="chat-action-btn attach-btn"
-                  onClick={() => chatFileInputRef.current?.click()}
-                  title="Attach document (single file)"
+                  onClick={() => {
+                    if (book?.id || attachedFiles.length > 0 || uploadingFile || chatPreviewFile) {
+                      alert("Only one file per chat session can be uploaded. Click \"+ New\" at the top to start a fresh chat session for a new document.");
+                      return;
+                    }
+                    chatFileInputRef.current?.click();
+                  }}
+                  title={book?.id || attachedFiles.length > 0 ? "Only 1 file allowed per chat session (click + New for a new document)" : "Attach document (single file)"}
                   aria-label="Attach document"
+                  style={{
+                    opacity: (book?.id || attachedFiles.length > 0 || uploadingFile) ? 0.45 : 1,
+                    cursor: (book?.id || attachedFiles.length > 0 || uploadingFile) ? "not-allowed" : "pointer"
+                  }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19" />
