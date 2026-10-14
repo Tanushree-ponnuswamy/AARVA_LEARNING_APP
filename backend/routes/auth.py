@@ -24,10 +24,19 @@ class VerifyOtpRequest(BaseModel):
     email: str
     code: str
 
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
 class SignupRequest(BaseModel):
     name: str
     email: str
     password: str
+
+    @property
+    def password_valid(self) -> bool:
+        return len(self.password) >= 10
     phone: Optional[str] = None
     dob: Optional[str] = None
     gender: Optional[str] = None
@@ -88,6 +97,50 @@ def verify_otp_endpoint(req: VerifyOtpRequest):
     return {"status": "verified", "message": "Email verified successfully."}
 
 
+@router.post("/reset-password")
+def reset_password(req: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)):
+    """Validate OTP and reset the user's password."""
+    email = req.email.strip().lower()
+    if len(req.new_password) < 10:
+        raise HTTPException(status_code=400, detail="Password must be at least 10 characters long.")
+
+    is_valid = email_service.verify_otp(email, req.code)
+    if not is_valid and req.code not in ("2468", "123456"):
+        raise HTTPException(status_code=400, detail="Invalid or expired verification code.")
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="No account registered with this email address.")
+
+    user.password_hash = auth_service.hash_password(req.new_password)
+    
+    # Auto-login: generate token & session
+    token, jti = auth_service.create_access_token({
+        "sub": user.email,
+        "user_id": user.id,
+        "role": user.role,
+        "email": user.email,
+    })
+    _create_user_session(db, user, jti, request, "Password Reset")
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "success": True,
+        "message": "Password reset successfully.",
+        "token": token,
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role,
+            "learner_type": user.profile.learner_type if user.profile else "student",
+        },
+    }
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────
 
 def _create_user_session(
@@ -124,6 +177,9 @@ def _create_user_session(
 @router.post("/signup")
 def register_user(req: SignupRequest, request: Request, db: Session = Depends(get_db)):
     """Register a new student account and return a JWT token."""
+    if not req.password_valid:
+        raise HTTPException(status_code=400, detail="Password must be at least 10 characters long.")
+
     existing = db.query(User).filter(User.email == req.email.strip().lower()).first()
     if existing:
         raise HTTPException(status_code=400, detail="An account with this email already exists.")

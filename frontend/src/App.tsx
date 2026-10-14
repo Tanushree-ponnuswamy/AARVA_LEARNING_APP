@@ -127,7 +127,7 @@ function Icon({
 function Logo({ dark = false }: { dark?: boolean }) {
   return (
     <a className={`logo ${dark ? "logo-dark" : ""}`} href="#home" aria-label="Aarva home">
-      <img className="logo-img" src="/aarva-logo.png?v=white" alt="Aarva logo" width={34} height={34} />
+      <img className="logo-img" src="/aarva-logo.png" alt="Aarva logo" width={34} height={34} />
       <span>Aarva</span>
     </a>
   );
@@ -678,29 +678,165 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
     setForgotMsg("");
   };
 
+  // ── forgot password state ─────────────────────────────────────────────
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotOtpDigits, setForgotOtpDigits] = useState<string[]>(["", "", "", ""]);
+  const [forgotNewPassword, setForgotNewPassword] = useState("");
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState("");
+  const [forgotResendStatus, setForgotResendStatus] = useState("");
+  const forgotOtpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   const handleForgotPassword = async () => {
-    const targetEmail = loginEmail.trim();
+    setLoginError("");
+    setForgotError("");
+    setForgotResendStatus("");
+    setForgotOtpDigits(["", "", "", ""]);
+    setForgotNewPassword("");
+    setForgotConfirmPassword("");
+
+    const targetEmail = (loginEmail || forgotEmail).trim();
+    if (targetEmail && targetEmail.includes("@")) {
+      setForgotEmail(targetEmail);
+      setForgotLoading(true);
+      setStage("forgot-verify");
+      try {
+        const data = await apiPost("/api/auth/send-otp", { email: targetEmail, length: 4 });
+        if (data.preview_code) {
+          setExpectedCode(data.preview_code);
+        }
+        setForgotResendStatus(`Verification code sent to ${targetEmail}`);
+        setTimeout(() => setForgotResendStatus(""), 6000);
+      } catch (err: unknown) {
+        setForgotError(err instanceof Error ? err.message : "Could not send verification email.");
+      } finally {
+        setForgotLoading(false);
+      }
+    } else {
+      setForgotEmail("");
+      setStage("forgot-email");
+    }
+  };
+
+  const submitForgotEmail = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const targetEmail = forgotEmail.trim();
     if (!targetEmail || !targetEmail.includes("@")) {
-      setLoginError("Please enter your registered email address above to receive your reset code.");
+      setForgotError("Please enter a valid registered email address.");
       return;
     }
-    setLoginError("");
-    setLoginLoading(true);
+    setForgotError("");
+    setForgotLoading(true);
     try {
       const data = await apiPost("/api/auth/send-otp", { email: targetEmail, length: 4 });
       if (data.preview_code) {
         setExpectedCode(data.preview_code);
       }
-      setForgotMsg(`Verification code dispatched to ${targetEmail}. Check your email inbox.`);
+      setStage("forgot-verify");
+      setForgotResendStatus(`Verification code sent to ${targetEmail}`);
+      setTimeout(() => setForgotResendStatus(""), 6000);
     } catch (err: unknown) {
-      setLoginError(err instanceof Error ? err.message : "Could not send verification email.");
+      setForgotError(err instanceof Error ? err.message : "Could not dispatch verification email.");
     } finally {
-      setLoginLoading(false);
+      setForgotLoading(false);
+    }
+  };
+
+  const handleForgotOtpChange = (index: number, value: string) => {
+    const cleanVal = value.replace(/\D/g, "");
+    if (!cleanVal) {
+      const updated = [...forgotOtpDigits];
+      updated[index] = "";
+      setForgotOtpDigits(updated);
+      return;
+    }
+    const updated = [...forgotOtpDigits];
+    if (cleanVal.length === 1) {
+      updated[index] = cleanVal;
+      setForgotOtpDigits(updated);
+      if (index < 3) {
+        forgotOtpRefs.current[index + 1]?.focus();
+      }
+    } else {
+      const digits = cleanVal.slice(0, 4).split("");
+      digits.forEach((d, idx) => {
+        if (index + idx < 4) updated[index + idx] = d;
+      });
+      setForgotOtpDigits(updated);
+      const nextIdx = Math.min(index + digits.length, 3);
+      forgotOtpRefs.current[nextIdx]?.focus();
+    }
+  };
+
+  const handleForgotOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !forgotOtpDigits[index] && index > 0) {
+      forgotOtpRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleForgotResendCode = async () => {
+    const targetEmail = forgotEmail.trim();
+    if (!targetEmail || !targetEmail.includes("@")) {
+      setForgotError("Please enter a valid email address.");
+      return;
+    }
+    setForgotResendStatus(`Sending new verification code to ${targetEmail}…`);
+    try {
+      const data = await apiPost("/api/auth/send-otp", { email: targetEmail, length: 4 });
+      if (data.preview_code) {
+        setExpectedCode(data.preview_code);
+      }
+      setForgotResendStatus(`New verification code sent to ${targetEmail}`);
+      setTimeout(() => setForgotResendStatus(""), 5000);
+    } catch (err: unknown) {
+      setForgotResendStatus(err instanceof Error ? err.message : "Failed to resend code.");
+      setTimeout(() => setForgotResendStatus(""), 5000);
+    }
+  };
+
+  const submitResetPassword = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setForgotError("");
+    const enteredCode = forgotOtpDigits.join("");
+    if (enteredCode.length < 4) {
+      setForgotError("Please enter the complete 4-digit verification code.");
+      return;
+    }
+    if (forgotNewPassword.length < 10) {
+      setForgotError("Password must be at least 10 characters long.");
+      return;
+    }
+    if (forgotNewPassword !== forgotConfirmPassword) {
+      setForgotError("Passwords do not match. Please re-enter.");
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      const data = await apiPost("/api/auth/reset-password", {
+        email: forgotEmail.trim(),
+        code: enteredCode,
+        new_password: forgotNewPassword,
+      });
+
+      if (data.access_token) {
+        localStorage.setItem("aarva_token", data.access_token);
+      }
+      if (data.user) {
+        localStorage.setItem("aarva_user", JSON.stringify(data.user));
+        setSuccessName(data.user.name);
+      }
+      onComplete(data.user?.name || "Student");
+    } catch (err: unknown) {
+      setForgotError(err instanceof Error ? err.message : "Password reset failed. Please check the code.");
+    } finally {
+      setForgotLoading(false);
     }
   };
 
   // ── signup form state ─────────────────────────────────────────────────
-  const [stage, setStage] = useState<"login" | "signup-personal" | "signup-preferences" | "signup-verify" | "success">("login");
+  const [stage, setStage] = useState<"login" | "signup-personal" | "signup-preferences" | "signup-verify" | "forgot-email" | "forgot-verify" | "success">("login");
   const [signupName, setSignupName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
@@ -964,7 +1100,7 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       placeholder="Enter your password"
-                      minLength={6}
+                      minLength={10}
                       autoComplete="current-password"
                       required
                     />
@@ -1007,6 +1143,146 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
             </>
           )}
 
+          {/* ── Forgot Password: Enter Email ──────────────────────── */}
+          {stage === "forgot-email" && (
+            <>
+              <p className="kicker">Password Recovery</p>
+              <h2>Reset your password.</h2>
+              <p className="auth-subtitle">Enter your registered email address and we&apos;ll send you a 4-digit verification code.</p>
+              <form className="auth-form" id="forgot-email-form" onSubmit={submitForgotEmail}>
+                <label>
+                  Email address
+                  <input
+                    id="forgot-email-input"
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="Enter your email address"
+                    autoComplete="email"
+                    required
+                    autoFocus
+                  />
+                </label>
+                {forgotError && <p className="form-error" role="alert">{forgotError}</p>}
+                <button
+                  id="forgot-email-submit"
+                  className="auth-btn-azure"
+                  type="submit"
+                  disabled={forgotLoading}
+                >
+                  {forgotLoading ? "Sending code…" : <><span>Send verification code</span> <Icon name="arrow" size={18} /></>}
+                </button>
+              </form>
+              <p className="auth-switch">Remember your password? <button type="button" onClick={() => { setStage("login"); setForgotError(""); setLoginError(""); }}>Back to login</button></p>
+            </>
+          )}
+
+          {/* ── Forgot Password: Enter Verification Code & New Password */}
+          {stage === "forgot-verify" && (
+            <div className="verify-container">
+              <div className="verify-hero">
+                <div className="verify-mail-badge" aria-hidden="true">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0091ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                  </svg>
+                </div>
+                <p className="verify-kicker">SECURITY VERIFICATION</p>
+                <h1 className="verify-heading">Reset your password.</h1>
+                <p className="verify-caption">
+                  We sent a 4-digit verification code to <strong>{forgotEmail}</strong>. Enter the code and set your new password.
+                </p>
+              </div>
+
+              <form className="auth-form" id="forgot-verify-form" onSubmit={submitResetPassword}>
+                <div className="otp-box-wrapper">
+                  <label className="otp-label" htmlFor="forgot-otp-digit-0">4-Digit Verification Code</label>
+                  <div className="otp-inputs-row">
+                    {[0, 1, 2, 3].map((index) => (
+                      <input
+                        key={index}
+                        id={`forgot-otp-digit-${index}`}
+                        ref={(el) => { forgotOtpRefs.current[index] = el; }}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        className="otp-digit-cell"
+                        value={forgotOtpDigits[index]}
+                        onChange={(e) => handleForgotOtpChange(index, e.target.value)}
+                        onKeyDown={(e) => handleForgotOtpKeyDown(index, e)}
+                        autoFocus={index === 0}
+                      />
+                    ))}
+                  </div>
+                  <div className="otp-helper-row">
+                    <button
+                      type="button"
+                      className="preview-code-btn"
+                      onClick={() => setForgotOtpDigits(expectedCode.split(""))}
+                      title="Click to auto-fill code"
+                    >
+                      Preview code: <span>{expectedCode}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <label style={{ marginTop: "0.8rem" }}>
+                  New password
+                  <input
+                    id="forgot-new-password"
+                    type="password"
+                    value={forgotNewPassword}
+                    onChange={(e) => setForgotNewPassword(e.target.value)}
+                    placeholder="Enter new password (min. 10 chars)"
+                    minLength={10}
+                    autoComplete="new-password"
+                    required
+                  />
+                </label>
+
+                <label>
+                  Confirm new password
+                  <input
+                    id="forgot-confirm-password"
+                    type="password"
+                    value={forgotConfirmPassword}
+                    onChange={(e) => setForgotConfirmPassword(e.target.value)}
+                    placeholder="Confirm your new password"
+                    minLength={10}
+                    autoComplete="new-password"
+                    required
+                  />
+                </label>
+
+                {forgotError && <p className="form-error" role="alert" style={{ textAlign: "center" }}>{forgotError}</p>}
+                {forgotResendStatus && <p className="resend-success" role="status">{forgotResendStatus}</p>}
+
+                <button
+                  id="forgot-reset-submit"
+                  className="auth-btn-azure"
+                  type="submit"
+                  disabled={forgotLoading}
+                >
+                  {forgotLoading ? "Resetting password…" : <><span>Reset password & sign in</span> <Icon name="arrow" size={18} /></>}
+                </button>
+
+                <div className="verify-footer-actions">
+                  <button type="button" className="resend-text-link" onClick={handleForgotResendCode}>
+                    Didn&apos;t receive it? Resend code
+                  </button>
+                  <div style={{ display: "flex", gap: "1.2rem", marginTop: "0.2rem" }}>
+                    <button type="button" className="back-text-link" onClick={() => setStage("forgot-email")}>
+                      ← Change email
+                    </button>
+                    <button type="button" className="back-text-link" onClick={() => { setStage("login"); setForgotError(""); setLoginError(""); }}>
+                      ← Back to login
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          )}
+
           {/* ── Signup step 1 of 3: Account Creation ───────────────── */}
           {stage === "signup-personal" && (
             <>
@@ -1033,7 +1309,7 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
                     id="signup-name"
                     value={signupName}
                     onChange={(e) => setSignupName(e.target.value)}
-                    placeholder="e.g. Tanushree P"
+                    placeholder="Enter your full name"
                     required
                   />
                 </label>
@@ -1044,7 +1320,7 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
                     type="email"
                     value={signupEmail}
                     onChange={(e) => setSignupEmail(e.target.value)}
-                    placeholder="tanushreep.cs24@bitsathy.ac.in"
+                    placeholder="Enter your email address"
                     autoComplete="email"
                     required
                   />
@@ -1056,8 +1332,8 @@ function AuthPage({ onHome, onComplete }: { onHome: () => void; onComplete: (nam
                     type="password"
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
-                    placeholder="At least 6 characters"
-                    minLength={6}
+                    placeholder="Enter your password"
+                    minLength={10}
                     autoComplete="new-password"
                     required
                   />
@@ -1561,7 +1837,8 @@ function PdfJsViewer({
       </div>
 
       {/* 2. PDF Viewer Charcoal Toolbar */}
-      <div className="pdf-viewer-subtoolbar" style={{
+      {!error && (
+        <div className="pdf-viewer-subtoolbar" style={{
         height: "2.4rem",
         background: "#18181b",
         color: "#f4f4f5",
@@ -1648,6 +1925,7 @@ function PdfJsViewer({
           </div>
         </div>
       </div>
+      )}
 
       {/* 3. Document Canvas Area with Single Scrollbar */}
       <div
@@ -1674,17 +1952,16 @@ function PdfJsViewer({
         )}
 
         {error && (
-          <div style={{ minHeight: "300px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", background: "#ffffff", padding: "2rem", borderRadius: "0.75rem", textAlign: "center", maxWidth: "420px", margin: "auto", boxShadow: "0 4px 20px rgba(0,0,0,0.2)" }}>
-            <span style={{ fontSize: "2rem" }}>📄</span>
-            <h4 style={{ margin: 0, color: "#1e293b", fontWeight: 700 }}>{fileName}</h4>
-            <p style={{ margin: 0, color: "#64748b", fontSize: "0.82rem" }}>{error}</p>
-            <button
-              type="button"
-              onClick={handleDownload}
-              style={{ marginTop: "0.5rem", padding: "0.45rem 1rem", background: "#7458f5", color: "#fff", border: "none", borderRadius: "0.5rem", fontWeight: 600, fontSize: "0.82rem", cursor: "pointer" }}
-            >
-              Download PDF
-            </button>
+          <div style={{ minHeight: "260px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.85rem", background: "#ffffff", padding: "2.2rem 2rem", borderRadius: "1rem", textAlign: "center", maxWidth: "400px", margin: "auto", boxShadow: "0 4px 24px rgba(0,0,0,0.08)", border: "1px solid #f1f0f7" }}>
+            <span style={{ fontSize: "2.4rem" }}>📖</span>
+            <h4 style={{ margin: 0, color: "#1e293b", fontWeight: 700, fontSize: "1.05rem" }}>
+              {fileName && fileName !== "document.pdf" ? fileName : "No Document Preview"}
+            </h4>
+            <p style={{ margin: 0, color: "#64748b", fontSize: "0.85rem", lineHeight: 1.5, maxWidth: "320px" }}>
+              {error.includes("404")
+                ? "Preview file is not available on the server. Upload a document to view pages and study with AI."
+                : "Unable to load document preview."}
+            </p>
           </div>
         )}
 
@@ -1951,11 +2228,13 @@ function FilePreviewPane({
 function UploadWorkspace({
   book,
   books,
+  userId,
   onUploaded,
   onSelectBook,
 }: {
   book: LearningBook | null;
   books: LearningBook[];
+  userId?: number;
   onUploaded: () => void;
   onSelectBook: (book: LearningBook | null) => void;
 }) {
@@ -2030,8 +2309,9 @@ function UploadWorkspace({
       const user = (() => { try { return JSON.parse(localStorage.getItem("aarva_user") || "null"); } catch { return null; } })();
 
       // 1. Fetch Chat History
-      if (user?.id) {
-        apiFetch<{ messages: { from: string; text: string }[] }>(`/api/summary/chat/history/${book.id}?user_id=${user.id}`)
+      const currentUId = userId || user?.id;
+      if (currentUId) {
+        apiFetch<{ messages: { from: string; text: string }[] }>(`/api/summary/chat/history/${book.id}?user_id=${currentUId}`)
           .then((res) => {
             if (res.messages && res.messages.length > 0) {
               setMessages(res.messages);
@@ -2073,8 +2353,9 @@ function UploadWorkspace({
           text: "Hi, I'm Aarva 👋 — let's start the convo! Upload a book or just ask me anything to get going.",
         },
       ]);
+      setSummaryData(null);
     }
-  }, [book?.id]);
+  }, [book?.id, userId]);
 
   const [isListening, setIsListening] = useState(false);
   const [voiceAssistantActive, setVoiceAssistantActive] = useState(false);
@@ -2623,22 +2904,14 @@ function UploadWorkspace({
                 className={leftView === "files" ? "active" : ""}
                 onClick={() => setLeftView("files")}
               >
-                Files <span className="pill-badge">1</span>
+                Files
+                {(book?.id || selectedFile || chatPreviewFile) && (
+                  <span className="pill-badge">1</span>
+                )}
               </button>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              {leftView === "chat" && messages.length > 1 && (
-                <button
-                  type="button"
-                  className="new-chat-pill-btn"
-                  onClick={handleClearChat}
-                  title="Clear conversation"
-                  style={{ fontSize: "0.76rem", color: "#64748b" }}
-                >
-                  <span>Clear</span>
-                </button>
-              )}
               <button
                 type="button"
                 className="new-chat-pill-btn"
@@ -2674,14 +2947,29 @@ function UploadWorkspace({
                   pageNumber={currentPage}
                   onPageChange={setCurrentPage}
                 />
-              ) : (
+              ) : book?.id ? (
                 <FilePreviewPane
-                  src={book?.id ? `${API}/api/textbooks/${book.id}/file` : `${API}/api/textbooks/1/file`}
-                  fileName={book?.file_name || (book?.title ? `${book.title}.pdf` : "document.pdf")}
+                  src={`${API}/api/textbooks/${book.id}/file`}
+                  fileName={book.file_name || `${book.title}.pdf`}
                   fileType={(book as any)?.file_type || ""}
                   pageNumber={currentPage}
                   onPageChange={setCurrentPage}
                 />
+              ) : (
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1.2rem", padding: "2.5rem 1.5rem", textAlign: "center" }}>
+                  <div style={{ width: "4rem", height: "4rem", borderRadius: "1.2rem", background: "linear-gradient(135deg, rgba(116,88,245,0.1), rgba(0,153,255,0.08))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.9rem", boxShadow: "0 4px 16px rgba(116,88,245,0.12)" }}>
+                    📂
+                  </div>
+                  <div style={{ maxWidth: "300px" }}>
+                    <h4 style={{ margin: "0 0 0.4rem 0", color: "var(--ink)", fontWeight: 700, fontSize: "1rem" }}>No file uploaded yet</h4>
+                    <p style={{ margin: "0 0 1rem 0", fontSize: "0.83rem", color: "var(--ink-soft)", lineHeight: 1.55 }}>
+                      Upload a PDF, Word, or Excel file using the <b>+</b> button in the chat, or select a textbook from your library.
+                    </p>
+                    <p style={{ margin: 0, fontSize: "0.75rem", color: "#a0a0b8" }}>
+                      Once uploaded, the file preview will appear here with "Files <span style={{ background: "#7458f5", color: "#fff", borderRadius: "999px", padding: "0 5px", fontSize: "0.68rem", fontWeight: 700 }}>1</span>" badge active.
+                    </p>
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -3471,37 +3759,743 @@ function LibraryView({
   );
 }
 
-const questionKinds = ["Choose one", "Match pairs", "Fill the blank", "Card challenge", "Quick quiz", "Definition", "Mind game", "True or false"];
+interface TestQuestion {
+  id: number;
+  difficulty: "Basic" | "Medium" | "Advanced";
+  kind: string;
+  prompt: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+  misconception: string;
+}
 
-function TestView({ book, books = [], started, onStarted }: { book: LearningBook; books?: LearningBook[]; started: Set<number>; onStarted: (book: LearningBook) => void }) {
+interface TestResultSummary {
+  concept: string;
+  totalQuestions: number;
+  correctCount: number;
+  incorrectCount: number;
+  score: number;
+  maxScore: number;
+  percentage: number;
+  passed: boolean;
+  tierStats: {
+    basic: { correct: number; total: number };
+    medium: { correct: number; total: number };
+    advanced: { correct: number; total: number };
+  };
+  wrongQuestions: Array<{
+    question: TestQuestion;
+    selectedIndex: number;
+    userChoice: string;
+    correctChoice: string;
+  }>;
+}
+
+function generateConceptQuestions(concept: string, bookTitle: string): TestQuestion[] {
+  return [
+    {
+      id: 1,
+      difficulty: "Basic",
+      kind: "Definition",
+      prompt: `Which statement best defines "${concept}" in the context of ${bookTitle}?`,
+      options: [
+        `The foundational framework and core rules that govern ${concept} throughout the subject.`,
+        `A secondary optional add-on that has no impact on overall performance.`,
+        `An obsolete technique that has been completely deprecated in modern setups.`,
+        `A temporary placeholder applied only when no real information is available.`
+      ],
+      correctIndex: 0,
+      explanation: `${concept} establishes the baseline rules, architectural definitions, and structural integrity for ${bookTitle}.`,
+      misconception: `Assuming it is purely optional or incidental to the core structure.`
+    },
+    {
+      id: 2,
+      difficulty: "Basic",
+      kind: "Core Objective",
+      prompt: `What is the primary objective of understanding "${concept}"?`,
+      options: [
+        `To eliminate all computational hardware requirements.`,
+        `To ensure predictable, reliable results by grounding reasoning in verified principles.`,
+        `To avoid document reading and guess answers randomly.`,
+        `To replace all human verification with untested automation.`
+      ],
+      correctIndex: 1,
+      explanation: `The primary objective is predictable consistency and grounding reasoning in verified standards.`,
+      misconception: `Believing ${concept} is designed to eliminate human oversight rather than enhance precision.`
+    },
+    {
+      id: 3,
+      difficulty: "Basic",
+      kind: "Component Identification",
+      prompt: `Which of the following is an essential building block of "${concept}"?`,
+      options: [
+        `Arbitrary unvalidated parameters.`,
+        `Unstructured guesswork and disconnected theories.`,
+        `Systematic evaluation, standardized criteria, and clear input validation.`,
+        `Ignoring edge conditions and error signals.`
+      ],
+      correctIndex: 2,
+      explanation: `Systematic evaluation and standardized criteria form the bedrock of ${concept}.`,
+      misconception: `Treating informal approximations as equivalent to validated components.`
+    },
+    {
+      id: 4,
+      difficulty: "Basic",
+      kind: "True or False",
+      prompt: `True or False: In ${bookTitle}, "${concept}" requires rigorous verification before moving to downstream stages.`,
+      options: [
+        `True — Early verification prevents compounding errors in downstream stages.`,
+        `False — Downstream stages never depend on upstream concept accuracy.`
+      ],
+      correctIndex: 0,
+      explanation: `True. Catching discrepancies at the ${concept} stage prevents expensive downstream failures.`,
+      misconception: `Believing downstream modules are isolated from upstream flaws.`
+    },
+    {
+      id: 5,
+      difficulty: "Medium",
+      kind: "Practical Application",
+      prompt: `When encountering an unexpected anomaly in ${bookTitle}, how should you apply "${concept}"?`,
+      options: [
+        `Immediately restart the entire system without checking logs or state.`,
+        `Trace the anomaly back to the foundational ${concept} criteria and compare against the baseline.`,
+        `Disable all validation checks so the anomaly goes unnoticed.`,
+        `Assume the anomaly will self-correct without investigation.`
+      ],
+      correctIndex: 1,
+      explanation: `Tracing discrepancies against established baseline criteria identifies the root cause accurately.`,
+      misconception: `Relying on brute-force restarts without addressing root configuration causes.`
+    },
+    {
+      id: 6,
+      difficulty: "Medium",
+      kind: "Method Comparison",
+      prompt: `How does a structured approach to "${concept}" compare to ad-hoc empirical intuition?`,
+      options: [
+        `Structured ${concept} provides repeatable, measurable outcomes; ad-hoc intuition is brittle and non-deterministic.`,
+        `Ad-hoc intuition is always faster and never introduces regressions.`,
+        `There is no operational difference between the two approaches.`,
+        `Structured methods cannot be documented or taught.`
+      ],
+      correctIndex: 0,
+      explanation: `Standardized methods ensure reproducibility and deterministic error boundaries.`,
+      misconception: `Confusing quick anecdotal shortcuts with reliable, robust methodologies.`
+    },
+    {
+      id: 7,
+      difficulty: "Medium",
+      kind: "Process Workflow",
+      prompt: `What is the optimal workflow step immediately after formulating a hypothesis regarding "${concept}"?`,
+      options: [
+        `Deploying directly to production with zero staging tests.`,
+        `Validating the hypothesis with controlled test samples and verifying against known outputs.`,
+        `Discarding the documentation and resetting all baseline metrics.`,
+        `Assuming the hypothesis is infallible without empirical testing.`
+      ],
+      correctIndex: 1,
+      explanation: `Controlled validation against known ground truth ensures hypotheses are sound before commitment.`,
+      misconception: `Skipping validation under the assumption that theoretical formulation equals verification.`
+    },
+    {
+      id: 8,
+      difficulty: "Medium",
+      kind: "Validation Metric",
+      prompt: `Which indicator provides the strongest evidence of high mastery in "${concept}"?`,
+      options: [
+        `Consistently low error rates and fast recovery when encountering edge-case anomalies.`,
+        `Memorizing keywords without being able to explain practical trade-offs.`,
+        `Relying on external hints for every basic challenge.`,
+        `Avoiding difficult questions completely.`
+      ],
+      correctIndex: 0,
+      explanation: `Mastery is demonstrated by low error variance and swift adaptation during complex scenarios.`,
+      misconception: `Equating rote keyword memorization with genuine conceptual mastery.`
+    },
+    {
+      id: 9,
+      difficulty: "Advanced",
+      kind: "Critical Evaluation",
+      prompt: `In high-throughput environments, what is the critical trade-off when optimizing "${concept}"?`,
+      options: [
+        `Balancing deep verification latency against rapid processing throughput without compromising safety.`,
+        `Trading off all security mechanisms to gain minimal cosmetic speed.`,
+        `Ignoring hardware specifications and assuming infinite compute.`,
+        `Disabling all caching and forcing redundant computations.`
+      ],
+      correctIndex: 0,
+      explanation: `The classic engineering trade-off is latency versus thoroughness of verification checks.`,
+      misconception: `Assuming optimization can be achieved without acknowledging the throughput-safety balance.`
+    },
+    {
+      id: 10,
+      difficulty: "Advanced",
+      kind: "System Synthesis",
+      prompt: `When scaling "${concept}" across heterogeneous inputs, how do you prevent subtle drift or regressions?`,
+      options: [
+        `By freezing all models and refusing any future data updates.`,
+        `By implementing automated regression suites, continuous calibration, and clear invariant assertions.`,
+        `By turning off monitoring logs to reduce disk space.`,
+        `By relying exclusively on manual spot-checks once a year.`
+      ],
+      correctIndex: 1,
+      explanation: `Continuous calibration and automated regression suites keep performance aligned across diverse data distributions.`,
+      misconception: `Believing initial calibration remains invariant indefinitely without ongoing regression testing.`
+    }
+  ];
+}
+
+function TestView({
+  book,
+  books = [],
+  started,
+  completed = new Set(),
+  onStarted,
+  onCompleted,
+  onSelectBook,
+}: {
+  book: LearningBook;
+  books?: LearningBook[];
+  started: Set<number>;
+  completed?: Set<number>;
+  onStarted: (book: LearningBook) => void;
+  onCompleted?: (book: LearningBook) => void;
+  onSelectBook?: (book: LearningBook) => void;
+}) {
+  const [currentBook, setCurrentBook] = useState<LearningBook>(book);
   const [concept, setConcept] = useState("");
+  const [conceptIndex, setConceptIndex] = useState(0);
   const [question, setQuestion] = useState(0);
   const [answered, setAnswered] = useState(false);
   const [score, setScore] = useState(0);
-  const begin = (item: string) => { setConcept(item); setQuestion(0); setAnswered(false); onStarted(book); };
-  const answer = () => { if (!answered) setScore((value) => value + 10); setAnswered(true); };
-  const next = () => { setQuestion((value) => Math.min(49, value + 1)); setAnswered(false); };
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterMode, setFilterMode] = useState<"all" | "in-progress" | "completed">("all");
+  const [showRoadmap, setShowRoadmap] = useState(false);
 
-  if (concept) {
-    const kind = questionKinds[question % questionKinds.length];
-    const difficulty = question < 17 ? "Easy" : question < 34 ? "Intermediate" : "Advanced";
+  // Challenge test state
+  const [currentQuestions, setCurrentQuestions] = useState<TestQuestion[]>([]);
+  const [userAnswers, setUserAnswers] = useState<{ [qIndex: number]: number }>({});
+  const [testResult, setTestResult] = useState<TestResultSummary | null>(null);
+  const [discussingQuestionId, setDiscussingQuestionId] = useState<number | null>(null);
+  const [aiChatMessages, setAiChatMessages] = useState<{ [qId: number]: Array<{ sender: "ai" | "user"; text: string; loading?: boolean }> }>({});
+  const [aiInputText, setAiInputText] = useState<{ [qId: number]: string }>({});
+
+  // Track concept step progress per book: { [bookId: number]: number } (0 = step 1 active, 1 = step 2 unlocked, etc.)
+  const [bookSteps, setBookSteps] = useState<{ [bookId: number]: number }>(() => {
+    try {
+      const saved = localStorage.getItem("aarva_concept_steps");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const getStepProgress = (bookId: number) => {
+    if (completed?.has(bookId)) return 99; // All unlocked if book completed
+    return bookSteps[bookId] ?? 0;
+  };
+
+  const advanceStepProgress = (bookId: number, completedIdx: number) => {
+    setBookSteps((prev) => {
+      const current = prev[bookId] ?? 0;
+      const nextStep = Math.max(current, completedIdx + 1);
+      const updated = { ...prev, [bookId]: nextStep };
+      try {
+        localStorage.setItem("aarva_concept_steps", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const openRoadmap = (targetBook: LearningBook) => {
+    setCurrentBook(targetBook);
+    onSelectBook?.(targetBook);
+    setShowRoadmap(true);
+    setTestResult(null);
+  };
+
+  useEffect(() => {
+    if (book && book.id) {
+      setCurrentBook(book);
+    }
+  }, [book]);
+
+  const activeBook = currentBook?.id ? currentBook : (books[0] || book);
+
+  const begin = (item: string, targetBook?: LearningBook, idx?: number) => {
+    const chosen = targetBook || activeBook;
+    setCurrentBook(chosen);
+    onSelectBook?.(chosen);
+    setConcept(item);
+    setConceptIndex(idx ?? 0);
+    setQuestion(0);
+    setAnswered(false);
+    setScore(0);
+    setUserAnswers({});
+    setTestResult(null);
+    setDiscussingQuestionId(null);
+    const qList = generateConceptQuestions(item, chosen.title);
+    setCurrentQuestions(qList);
+    onStarted(chosen);
+  };
+
+  const handleSelectAnswer = (optIdx: number) => {
+    if (answered) return;
+    const currentQ = currentQuestions[question];
+    if (!currentQ) return;
+
+    const isCorrect = optIdx === currentQ.correctIndex;
+    setUserAnswers((prev) => ({ ...prev, [question]: optIdx }));
+    setAnswered(true);
+    if (isCorrect) {
+      setScore((s) => s + 10);
+    }
+  };
+
+  const handleNextQuestion = () => {
+    if (question < currentQuestions.length - 1) {
+      setQuestion((q) => q + 1);
+      setAnswered(false);
+    } else {
+      handleFinishTest();
+    }
+  };
+
+  const handleFinishTest = () => {
+    if (currentQuestions.length === 0) return;
+
+    let correctCount = 0;
+    let incorrectCount = 0;
+    const wrongQuestions: TestResultSummary["wrongQuestions"] = [];
+    const tierStats = {
+      basic: { correct: 0, total: 0 },
+      medium: { correct: 0, total: 0 },
+      advanced: { correct: 0, total: 0 },
+    };
+
+    currentQuestions.forEach((q, idx) => {
+      const selected = userAnswers[idx];
+      const tierKey = q.difficulty.toLowerCase() as "basic" | "medium" | "advanced";
+      tierStats[tierKey].total += 1;
+
+      if (selected !== undefined && selected === q.correctIndex) {
+        correctCount += 1;
+        tierStats[tierKey].correct += 1;
+      } else {
+        incorrectCount += 1;
+        wrongQuestions.push({
+          question: q,
+          selectedIndex: selected !== undefined ? selected : -1,
+          userChoice: selected !== undefined && q.options[selected] ? q.options[selected] : "Not answered",
+          correctChoice: q.options[q.correctIndex],
+        });
+      }
+    });
+
+    const percentage = Math.round((correctCount / currentQuestions.length) * 100);
+    const passed = percentage >= 70;
+
+    if (passed) {
+      advanceStepProgress(activeBook.id, conceptIndex);
+      const conceptsList = activeBook.concepts ?? ["Key Concepts", "Core Ideas", "Definitions", "Important Notes"];
+      if (conceptIndex + 1 >= conceptsList.length) {
+        onCompleted?.(activeBook);
+      }
+    }
+
+    setTestResult({
+      concept,
+      totalQuestions: currentQuestions.length,
+      correctCount,
+      incorrectCount,
+      score: correctCount * 10,
+      maxScore: currentQuestions.length * 10,
+      percentage,
+      passed,
+      tierStats,
+      wrongQuestions,
+    });
+    setConcept(""); // Exit question player to show testResult
+  };
+
+  const toggleDiscussion = (q: TestQuestion, userChoice: string, correctChoice: string) => {
+    if (discussingQuestionId === q.id) {
+      setDiscussingQuestionId(null);
+      return;
+    }
+    setDiscussingQuestionId(q.id);
+    if (!aiChatMessages[q.id] || aiChatMessages[q.id].length === 0) {
+      const welcome = `Hello! Let's clear up this concept together: In Question #${q.id}, you selected "${userChoice}". A common misunderstanding is that ${q.misconception}. However, the correct answer is "${correctChoice}" because ${q.explanation}. Feel free to ask me any question below to help solidify this concept!`;
+      setAiChatMessages((prev) => ({
+        ...prev,
+        [q.id]: [{ sender: "ai", text: welcome }],
+      }));
+    }
+  };
+
+  const sendTutorQuery = async (q: TestQuestion, userChoice: string, correctChoice: string) => {
+    const text = (aiInputText[q.id] || "").trim();
+    if (!text) return;
+
+    const current = aiChatMessages[q.id] || [];
+    setAiChatMessages((prev) => ({
+      ...prev,
+      [q.id]: [...current, { sender: "user", text }, { sender: "ai", text: "Analyzing your question...", loading: true }],
+    }));
+    setAiInputText((prev) => ({ ...prev, [q.id]: "" }));
+
+    try {
+      const res = await apiPost("/api/chat", {
+        query: `The student is reviewing a test on '${testResult?.concept || concept}' from the textbook '${activeBook.title}'. In question: "${q.prompt}", the student chose "${userChoice}" (incorrect), but the correct answer is "${correctChoice}". Student asks: "${text}". Explain clearly, resolve their confusion, and give a simple analogy so they learn this thoroughly.`,
+        textbook_id: activeBook.id,
+        user_id: 1,
+      });
+      const answer = res.response || res.answer || `In ${concept}, '${correctChoice}' is the accurate principle. ${q.explanation}. A good way to remember this is that ${q.explanation}`;
+      setAiChatMessages((prev) => ({
+        ...prev,
+        [q.id]: [...prev[q.id].filter((m) => !m.loading), { sender: "ai", text: answer }],
+      }));
+    } catch {
+      const fallback = `In ${concept}, '${correctChoice}' is the established standard. ${q.explanation}. When you chose '${userChoice}', you likely focused on a temporary symptom rather than the root architecture. To retain this, remember that ${q.explanation}`;
+      setAiChatMessages((prev) => ({
+        ...prev,
+        [q.id]: [...prev[q.id].filter((m) => !m.loading), { sender: "ai", text: fallback }],
+      }));
+    }
+  };
+
+  const isBookCompleted = (b: LearningBook) => {
+    return completed?.has(b.id) || (b.progress ?? 0) >= 100;
+  };
+
+  const isBookInProgress = (b: LearningBook) => {
+    if (isBookCompleted(b)) return false;
+    return started.has(b.id) || (b.progress ?? 0) > 0;
+  };
+
+  const allCount = books.length;
+  const inProgressCount = books.filter(isBookInProgress).length;
+  const completedCount = books.filter(isBookCompleted).length;
+
+  const filteredBooks = books.filter((item) => {
+    const q = searchQuery.trim().toLowerCase();
+    const matchesSearch = !q ||
+      item.title.toLowerCase().includes(q) ||
+      (item.author && item.author.toLowerCase().includes(q)) ||
+      (item.concepts && item.concepts.some((c) => c.toLowerCase().includes(q)));
+    if (!matchesSearch) return false;
+
+    if (filterMode === "completed") return isBookCompleted(item);
+    if (filterMode === "in-progress") return isBookInProgress(item);
+    return true;
+  });
+
+  /* ── 1. ACTIVE QUESTION PLAYER ── */
+  if (concept && currentQuestions.length > 0) {
+    const currentQ = currentQuestions[question] || currentQuestions[0];
+    const isLast = question === currentQuestions.length - 1;
+    const selectedOpt = userAnswers[question];
+    const hasAnswered = selectedOpt !== undefined;
+    const isCorrect = hasAnswered && selectedOpt === currentQ.correctIndex;
+
     return (
       <section className="game-view">
-        <div className="game-top"><button type="button" onClick={() => setConcept("")}>← Concepts</button><div><span>{book.title}</span><b>{concept}</b></div><div className="game-score"><Icon name="spark" size={16} /> {score} XP</div></div>
-        <div className="question-progress"><span><i style={{ width: `${((question + 1) / 50) * 100}%` }} /></span><small>Question {question + 1} of 50</small></div>
+        <div className="game-top">
+          <button type="button" onClick={() => { setConcept(""); setShowRoadmap(true); }}>← Roadmap</button>
+          <div><span>{activeBook.title}</span><b>{concept} Challenge</b></div>
+          <div className="game-score"><Icon name="spark" size={16} /> {score} XP</div>
+        </div>
+
+        <div className="question-progress">
+          <span><i style={{ width: `${((question + 1) / currentQuestions.length) * 100}%` }} /></span>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.8rem" }}>
+            <small>Question {question + 1} of {currentQuestions.length}</small>
+            <button
+              type="button"
+              onClick={handleFinishTest}
+              style={{ background: "none", border: "none", color: "var(--violet)", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}
+            >
+              Finish & view score
+            </button>
+          </div>
+        </div>
+
         <div className="game-card">
-          <div className="question-meta"><span>{kind}</span><span className={difficulty.toLowerCase()}>{difficulty}</span></div>
-          <p className="question-number">Challenge {String(question + 1).padStart(2, "0")}</p>
-          <h2>{kind === "Fill the blank" ? "A model improves by learning patterns from ______." : kind === "Definition" ? "Which statement best defines validation?" : kind === "Match pairs" ? "Match each learning term to its purpose." : `Which idea best explains ${concept.toLowerCase()}?`}</h2>
-          {kind === "Match pairs" ? (
-            <div className="match-board"><div><button type="button" onClick={answer}>Feature</button><button type="button" onClick={answer}>Model</button><button type="button" onClick={answer}>Validation</button></div><div><button type="button" onClick={answer}>Checks performance</button><button type="button" onClick={answer}>Input information</button><button type="button" onClick={answer}>Represents a pattern</button></div></div>
-          ) : kind === "Card challenge" || kind === "Mind game" ? (
-            <div className="memory-board">{["Pattern", "Example", "Test", "Insight"].map((item) => <button type="button" onClick={answer} key={item}><Icon name="spark" /><span>{answered ? item : "Reveal"}</span></button>)}</div>
-          ) : (
-            <div className="answer-grid">{["Past examples and feedback", "Random guesses only", "A fixed list of answers", "Unrelated observations"].map((item, index) => <button className={answered && index === 0 ? "correct" : ""} type="button" onClick={answer} key={item}><span>{String.fromCharCode(65 + index)}</span>{item}</button>)}</div>
+          <div className="question-meta">
+            <span className={`difficulty-badge ${currentQ.difficulty.toLowerCase()}`}>
+              {currentQ.difficulty === "Basic" ? "🟢 Basic Level" : currentQ.difficulty === "Medium" ? "🟡 Medium Level" : "🔴 Advanced Level"}
+            </span>
+            <span style={{ background: "#f4f3ff", color: "var(--violet)" }}>{currentQ.kind}</span>
+          </div>
+
+          <p className="question-number">Challenge {String(question + 1).padStart(2, "0")} of {currentQuestions.length}</p>
+          <h2>{currentQ.prompt}</h2>
+
+          <div className="answer-grid">
+            {currentQ.options.map((optText, optIndex) => {
+              const letter = String.fromCharCode(65 + optIndex);
+              let btnClass = "";
+              if (hasAnswered) {
+                if (optIndex === currentQ.correctIndex) {
+                  btnClass = "correct";
+                } else if (optIndex === selectedOpt) {
+                  btnClass = "incorrect";
+                }
+              }
+
+              return (
+                <button
+                  key={optIndex}
+                  className={btnClass}
+                  type="button"
+                  onClick={() => handleSelectAnswer(optIndex)}
+                  disabled={hasAnswered}
+                >
+                  <span>{letter}</span>
+                  {optText}
+                </button>
+              );
+            })}
+          </div>
+
+          {hasAnswered && (
+            <div className={`answer-feedback ${isCorrect ? "correct" : "incorrect"}`}>
+              <span>{isCorrect ? "✓ Correct!" : "❌ Incorrect"}</span>
+              <p>
+                {isCorrect
+                  ? currentQ.explanation
+                  : `${currentQ.explanation} (Common misconception: ${currentQ.misconception})`}
+              </p>
+            </div>
           )}
-          {answered && <div className="answer-feedback"><span>Correct</span><p>Great connection. Examples provide the evidence a model uses to recognize useful patterns.</p></div>}
-          <div className="game-footer"><span>Questions adapt from easy to advanced as you progress.</span><button type="button" onClick={next} disabled={!answered || question === 49}>{question === 49 ? "Set complete" : "Next question"} <Icon name="arrow" size={16} /></button></div>
+
+          <div className="game-footer">
+            <span>
+              {isLast
+                ? "Final challenge! Click below to view your test score and discuss any mistakes."
+                : "Questions adapt through Basic, Medium, and Advanced levels."}
+            </span>
+            <button
+              type="button"
+              onClick={handleNextQuestion}
+              disabled={!hasAnswered}
+            >
+              {isLast ? "Finish Test & View Score 🎉" : "Next question"} <Icon name="arrow" size={16} />
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  /* ── 2. SCORE & RESULTS SUMMARY VIEW WITH WRONG ANSWER AI DISCUSSION ── */
+  if (testResult) {
+    const conceptsList = activeBook.concepts ?? ["Key Concepts", "Core Ideas", "Definitions", "Important Notes"];
+    const hasNextConcept = conceptIndex + 1 < conceptsList.length;
+
+    return (
+      <section className="test-results-view">
+        <button
+          type="button"
+          className="roadmap-back-btn"
+          onClick={() => { setTestResult(null); setShowRoadmap(true); }}
+        >
+          ← Back to Learning Roadmap
+        </button>
+
+        {/* Score & Mastery Banner */}
+        <div className="test-score-card">
+          <div className="score-main-info">
+            <div className="score-circle-badge">
+              <b>{testResult.percentage}%</b>
+              <small>Accuracy</small>
+            </div>
+            <div className="score-title-group">
+              <span className={`test-badge ${testResult.passed ? "completed" : "in-progress"}`}>
+                {testResult.passed ? "Concept Mastered 🏆" : "Review Recommended 📚"}
+              </span>
+              <h2>{testResult.concept} Test Results</h2>
+              <p>
+                You answered <b>{testResult.correctCount} of {testResult.totalQuestions}</b> questions correctly across Basic, Medium, and Advanced levels.
+              </p>
+            </div>
+          </div>
+          <div className="score-xp-pill">
+            <Icon name="spark" size={18} /> +{testResult.score} XP Earned
+          </div>
+        </div>
+
+        {/* 3-Tier Difficulty Breakdown */}
+        <div className="test-tier-grid">
+          <div className="tier-stat-card">
+            <div className="tier-stat-header basic">
+              <span>🟢 Basic Level</span>
+              <small>{testResult.tierStats.basic.total > 0 ? `${Math.round((testResult.tierStats.basic.correct / testResult.tierStats.basic.total) * 100)}%` : "0%"}</small>
+            </div>
+            <div className="tier-stat-number">{testResult.tierStats.basic.correct} / {testResult.tierStats.basic.total} Correct</div>
+            <div className="tier-stat-track">
+              <div
+                className="tier-stat-bar basic"
+                style={{ width: `${testResult.tierStats.basic.total > 0 ? (testResult.tierStats.basic.correct / testResult.tierStats.basic.total) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="tier-stat-card">
+            <div className="tier-stat-header medium">
+              <span>🟡 Medium Level</span>
+              <small>{testResult.tierStats.medium.total > 0 ? `${Math.round((testResult.tierStats.medium.correct / testResult.tierStats.medium.total) * 100)}%` : "0%"}</small>
+            </div>
+            <div className="tier-stat-number">{testResult.tierStats.medium.correct} / {testResult.tierStats.medium.total} Correct</div>
+            <div className="tier-stat-track">
+              <div
+                className="tier-stat-bar medium"
+                style={{ width: `${testResult.tierStats.medium.total > 0 ? (testResult.tierStats.medium.correct / testResult.tierStats.medium.total) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="tier-stat-card">
+            <div className="tier-stat-header advanced">
+              <span>🔴 Advanced Level</span>
+              <small>{testResult.tierStats.advanced.total > 0 ? `${Math.round((testResult.tierStats.advanced.correct / testResult.tierStats.advanced.total) * 100)}%` : "0%"}</small>
+            </div>
+            <div className="tier-stat-number">{testResult.tierStats.advanced.correct} / {testResult.tierStats.advanced.total} Correct</div>
+            <div className="tier-stat-track">
+              <div
+                className="tier-stat-bar advanced"
+                style={{ width: `${testResult.tierStats.advanced.total > 0 ? (testResult.tierStats.advanced.correct / testResult.tierStats.advanced.total) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Wrong Answers Review & AI Discussion Section */}
+        <div className="test-wrong-section">
+          <div className="test-wrong-section-header">
+            <h3>Discuss & Master Your Mistakes ({testResult.wrongQuestions.length})</h3>
+            <p>
+              {testResult.wrongQuestions.length === 0
+                ? "Flawless score! You answered every question correctly across all three tiers."
+                : "Review the questions you missed below. Click 'Discuss with AI Tutor' on any question to clarify doubts, understand the core concept, and ask questions."}
+            </p>
+          </div>
+
+          {testResult.wrongQuestions.length > 0 && (
+            <div className="test-wrong-cards-list">
+              {testResult.wrongQuestions.map(({ question: wq, userChoice, correctChoice }) => {
+                const isDiscussing = discussingQuestionId === wq.id;
+                const thread = aiChatMessages[wq.id] || [];
+
+                return (
+                  <div className="test-wrong-card" key={wq.id}>
+                    <div className="test-wrong-top">
+                      <span className={`difficulty-badge ${wq.difficulty.toLowerCase()}`}>
+                        {wq.difficulty === "Basic" ? "🟢 Basic" : wq.difficulty === "Medium" ? "🟡 Medium" : "🔴 Advanced"}
+                      </span>
+                      <small style={{ color: "#9ca3af", fontWeight: 600 }}>Question #{wq.id}</small>
+                    </div>
+
+                    <h4>{wq.prompt}</h4>
+
+                    <div className="answer-comparison-row">
+                      <div className="answer-chip wrong">
+                        <span>❌ Your answer:</span> <b>{userChoice}</b>
+                      </div>
+                      <div className="answer-chip correct">
+                        <span>✓ Correct answer:</span> <b>{correctChoice}</b>
+                      </div>
+                    </div>
+
+                    <p className="test-wrong-explanation">
+                      💡 <b>Key Concept Insight:</b> {wq.explanation}
+                    </p>
+
+                    <button
+                      type="button"
+                      className="btn-discuss-ai"
+                      onClick={() => toggleDiscussion(wq, userChoice, correctChoice)}
+                    >
+                      <Icon name="spark" size={15} />
+                      <span>{isDiscussing ? "Close AI Discussion" : "💬 Discuss with AI Tutor"}</span>
+                    </button>
+
+                    {/* Inline AI Discussion Drawer */}
+                    {isDiscussing && (
+                      <div className="ai-discuss-drawer">
+                        <div className="ai-discuss-header">
+                          <Icon name="spark" size={16} /> AARVA AI Tutor Discussion
+                        </div>
+                        <div className="ai-chat-thread">
+                          {thread.map((msg, mIdx) => (
+                            <div key={mIdx} className={`ai-bubble ${msg.sender}`}>
+                              {msg.loading ? (
+                                <span>Thinking and preparing clear explanation…</span>
+                              ) : (
+                                msg.text
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <form
+                          className="ai-input-wrap"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            sendTutorQuery(wq, userChoice, correctChoice);
+                          }}
+                        >
+                          <input
+                            type="text"
+                            placeholder="Ask AI Tutor to clarify this mistake or give an analogy..."
+                            value={aiInputText[wq.id] || ""}
+                            onChange={(e) => setAiInputText({ ...aiInputText, [wq.id]: e.target.value })}
+                          />
+                          <button type="submit">Ask Tutor</button>
+                        </form>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="test-results-actions">
+          {/* ── Re-Test button — always available ── */}
+          <button
+            type="button"
+            className="btn-results-secondary btn-retest-action"
+            onClick={() => begin(testResult.concept, activeBook, conceptIndex)}
+            title="Take this test again with fresh questions to strengthen your understanding"
+          >
+            🔁 Re-Test This Concept
+          </button>
+
+          {/* ── Continue to next concept — only if passed ── */}
+          {testResult.passed && hasNextConcept && (
+            <button
+              type="button"
+              className="btn-results-primary"
+              onClick={() => {
+                const nextIdx = conceptIndex + 1;
+                const nextConcept = conceptsList[nextIdx];
+                begin(nextConcept, activeBook, nextIdx);
+              }}
+            >
+              <span>Continue → {conceptsList[conceptIndex + 1]}</span>
+              <Icon name="arrow" size={16} />
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="btn-results-secondary"
+            onClick={() => { setTestResult(null); setShowRoadmap(true); }}
+          >
+            Back to Roadmap
+          </button>
         </div>
       </section>
     );
@@ -3509,27 +4503,279 @@ function TestView({ book, books = [], started, onStarted }: { book: LearningBook
 
   return (
     <section className="tests-view">
-      <div className="page-intro"><div><p className="kicker">Practice arena</p><h2>Turn every concept into a challenge.</h2><p>Each concept creates a 50-question journey from easy recall to advanced reasoning.</p></div><div className="test-total"><Icon name="spark" /><span><b>8 types</b><small>of interactive questions</small></span></div></div>
-      <div className="test-layout">
-        <article className="concept-map">
-          <div className="test-book-title"><span className={`mini-cover ${book.color}`}><MiniIcon name="book" /></span><div><small>Selected book</small><h3>{book.title}</h3></div></div>
-          <div className="concept-path">{(book.concepts ?? []).map((item, index) => <button type="button" onClick={() => begin(item)} key={item}><span>{index + 1}</span><div><b>{item}</b><small>50 adaptive questions</small></div><em>{index === 0 && started.has(book.id) ? "Continue" : "Start"}</em></button>)}</div>
-        </article>
-        <aside className="question-types"><p className="kicker">Inside every test</p><h3>Play your way to mastery</h3><div>{questionKinds.map((item, index) => <span key={item}><i>{index + 1}</i>{item}</span>)}</div></aside>
+      <div className="page-intro">
+        <div>
+          <p className="kicker">Practice arena</p>
+          <h2>Turn every concept into a challenge.</h2>
+          <p>Each concept creates a 50-question journey from easy recall to advanced reasoning.</p>
+        </div>
+        <div className="test-total"><Icon name="spark" /><span><b>8 types</b><small>of interactive questions</small></span></div>
       </div>
-      <div className="all-test-progress"><div className="card-title"><div><p className="kicker">Your progress</p><h3>Tests by book</h3></div></div>{books.map((item) => <div className="test-progress-row" key={item.id}><span className={`mini-cover ${item.color}`}><MiniIcon name="book" /></span><div><b>{item.title}</b><small>{started.has(item.id) ? "Test in progress" : "Not started"}</small><i><span style={{ width: started.has(item.id) ? `${Math.max(12, item.progress ?? 0)}%` : "0%" }} /></i></div><strong>{started.has(item.id) ? `${Math.max(12, item.progress ?? 0)}%` : "—"}</strong></div>)}</div>
+
+      {/* ── Test Search & Filters Bar ── */}
+      <div className="test-filter-bar">
+        <div className="library-search-box filter-search test-search-box">
+          <span className="search-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+          </span>
+          <input
+            type="text"
+            placeholder="Search tests by book title, concept, or author..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search tests"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="search-clear-btn"
+              onClick={() => setSearchQuery("")}
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        <div className="filter-chips-group test-filter-chips" role="group" aria-label="Filter tests by status">
+          <button
+            type="button"
+            className={`filter-chip ${filterMode === "all" ? "active" : ""}`}
+            onClick={() => setFilterMode("all")}
+          >
+            All <span>({allCount})</span>
+          </button>
+          <button
+            type="button"
+            className={`filter-chip ${filterMode === "in-progress" ? "active" : ""}`}
+            onClick={() => setFilterMode("in-progress")}
+          >
+            In Progress <span>({inProgressCount})</span>
+          </button>
+          <button
+            type="button"
+            className={`filter-chip ${filterMode === "completed" ? "active" : ""}`}
+            onClick={() => setFilterMode("completed")}
+          >
+            Completed <span>({completedCount})</span>
+          </button>
+        </div>
+      </div>
+
+      {books.length === 0 ? (
+        <div className="test-empty-state">
+          <div className="library-empty-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7458f5" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+          </div>
+          <h3>No textbooks uploaded yet</h3>
+          <p>Upload your textbook or syllabus first to generate concept quizzes and practice tests.</p>
+        </div>
+      ) : filteredBooks.length === 0 ? (
+        <div className="test-empty-state">
+          <div className="library-empty-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7458f5" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+          </div>
+          <h3>No tests match your filter</h3>
+          <p>
+            {searchQuery
+              ? `No tests found matching "${searchQuery}".`
+              : filterMode === "in-progress"
+              ? "You don't have any tests in progress right now. Start a test below to begin tracking!"
+              : filterMode === "completed"
+              ? "No completed tests yet. Finish a 50-question concept challenge to complete a test!"
+              : "No tests found."}
+          </p>
+          <button
+            className="auth-primary"
+            type="button"
+            onClick={() => {
+              setSearchQuery("");
+              setFilterMode("all");
+            }}
+            style={{ maxWidth: "12rem", margin: "0.5rem auto 0" }}
+          >
+            Reset filters
+          </button>
+        </div>
+      ) : showRoadmap ? (
+        /* ── Road Map View (only after clicking Start Test) ── */
+        <div className="test-layout">
+          <div style={{ width: "100%" }}>
+            <button
+              type="button"
+              className="roadmap-back-btn"
+              onClick={() => setShowRoadmap(false)}
+            >
+              ← Back to all tests
+            </button>
+
+            <div className="roadmap-hero-card">
+              <div className="roadmap-hero-top">
+                <span className={`mini-cover ${activeBook.color || "violet"}`}><MiniIcon name="book" /></span>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <small style={{ textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink-soft)", fontWeight: 700 }}>Learning Roadmap</small>
+                    {isBookCompleted(activeBook) ? (
+                      <span className="test-badge completed">Completed</span>
+                    ) : isBookInProgress(activeBook) ? (
+                      <span className="test-badge in-progress">In Progress</span>
+                    ) : (
+                      <span className="test-badge not-started">Not Started</span>
+                    )}
+                  </div>
+                  <h3>{activeBook.title}</h3>
+                </div>
+              </div>
+              <p className="roadmap-hero-caption">
+                Take each challenge in order to master the concepts progressively. Each stage unlocks after completing the previous concept challenge.
+              </p>
+              {(() => {
+                const conceptsList = activeBook.concepts ?? ["Key Concepts", "Core Ideas", "Definitions", "Important Notes"];
+                const currentStep = getStepProgress(activeBook.id);
+                const unlockedCount = isBookCompleted(activeBook) ? conceptsList.length : Math.min(conceptsList.length, currentStep + 1);
+                const pct = Math.round((Math.min(conceptsList.length, currentStep) / conceptsList.length) * 100);
+                return (
+                  <div className="roadmap-progress-summary">
+                    <div style={{ display: "flex", justifyContent: "space-between", maxWidth: "24rem" }}>
+                      <span>Stage <b>{unlockedCount} of {conceptsList.length}</b> unlocked</span>
+                      <b>{pct}% mastered</b>
+                    </div>
+                    <div className="roadmap-progress-track">
+                      <div className="roadmap-progress-bar" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <article className="concept-map" style={{ padding: "1.8rem 1.6rem" }}>
+              <div className="card-title" style={{ marginBottom: "1rem" }}>
+                <div>
+                  <p className="kicker">Orderly concept progression</p>
+                  <h3>Master concepts step-by-step</h3>
+                </div>
+              </div>
+              <div className="concept-path" style={{ margin: "0 auto", maxWidth: "100%" }}>
+                {(() => {
+                  const conceptsList = activeBook.concepts ?? ["Key Concepts", "Core Ideas", "Definitions", "Important Notes"];
+                  const currentStep = getStepProgress(activeBook.id);
+                  const isFinished = isBookCompleted(activeBook);
+                  return conceptsList.map((item, index) => {
+                    const isCompleted = isFinished || index < currentStep;
+                    const isCurrent = !isFinished && index === currentStep;
+                    const isLocked = !isFinished && index > currentStep;
+                    return (
+                      <button
+                        type="button"
+                        key={item}
+                        disabled={isLocked}
+                        className={`concept-step-item ${isCompleted ? "completed" : isCurrent ? "active" : "locked"}`}
+                        onClick={() => !isLocked && begin(item, activeBook, index)}
+                        title={isLocked ? `Complete step ${index} first to unlock this concept` : `Start ${item}`}
+                      >
+                        <span>
+                          {isCompleted ? "✓" : index + 1}
+                        </span>
+                        <div>
+                          <b>{item}</b>
+                          <small>
+                            {isCompleted
+                              ? "Completed ✓ • Click to Re-Test and improve your score"
+                              : isCurrent
+                              ? "Active • Basic → Medium → Advanced questions"
+                              : `Locked • Complete step ${index} first`}
+                          </small>
+                        </div>
+                        <em className={isCurrent ? "start-active" : isCompleted ? "retake-btn" : "locked-btn"}>
+                          {isCompleted ? "🔁 Re-Test ↺" : isCurrent ? "Start Challenge →" : "Locked 🔒"}
+                        </em>
+                      </button>
+                    );
+                  });
+                })()}
+              </div>
+            </article>
+          </div>
+        </div>
+      ) : (
+        /* ── Tests Overview: List of Tests by book ── */
+        <>
+          <div className="all-test-progress">
+            <div className="card-title">
+              <div>
+                <p className="kicker">Your progress</p>
+                <h3>Tests by book ({filteredBooks.length})</h3>
+              </div>
+            </div>
+            <div className="all-test-progress-list">
+              {filteredBooks.map((item) => {
+                const isCompleted = isBookCompleted(item);
+                const inProgress = isBookInProgress(item);
+                const isSelected = activeBook && activeBook.id === item.id;
+                const pct = isCompleted ? 100 : inProgress ? Math.max(15, item.progress ?? 0) : 0;
+                return (
+                  <div
+                    className={`test-progress-row selectable ${isSelected ? "selected" : ""}`}
+                    key={item.id}
+                    onClick={() => {
+                      setCurrentBook(item);
+                      onSelectBook?.(item);
+                    }}
+                    title={`Click to select ${item.title}`}
+                  >
+                    <span className={`mini-cover ${item.color || "violet"}`}><MiniIcon name="book" /></span>
+                    <div className="test-row-main">
+                      <div className="test-row-header-wrap">
+                        <b>{item.title}</b>
+                      </div>
+                      <i><span style={{ width: `${pct}%`, background: isCompleted ? "linear-gradient(90deg, #10b981, #059669)" : undefined }} /></i>
+                    </div>
+                    <div className="test-row-actions">
+                      {isCompleted ? (
+                        <span className="test-badge completed">Completed</span>
+                      ) : inProgress ? (
+                        <span className="test-badge in-progress">In Progress</span>
+                      ) : (
+                        <span className="test-badge not-started">Not Started</span>
+                      )}
+                      <button
+                        type="button"
+                        className={`test-row-btn ${isSelected ? "primary" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openRoadmap(item);
+                        }}
+                      >
+                        {isCompleted ? "🔁 Re-Test ↺" : inProgress ? "Continue →" : "Start Test →"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
     </section>
   );
 }
 
-function ProfileView({ name }: { name: string }) {
-  const firstName = name.split(" ")[0];
+function ProfileView({ name, email, bookCount }: { name: string; email: string; bookCount: number }) {
+  const firstName = name.split(" ")[0] || "there";
   const heatmap = Array.from({ length: 161 }, (_, index) => {
-    // Recorded study activity for January & February (first 63 days)
+    // Show activity only for the first 63 days, rest empty
     if (index < 63) {
       return index % 13 === 0 ? 4 : index % 7 === 0 ? 3 : index % 5 === 0 ? 2 : index % 3 === 0 ? 1 : 0;
     }
-    // Empty activity boxes for March, April, May
     return 0;
   });
 
@@ -3537,7 +4783,7 @@ function ProfileView({ name }: { name: string }) {
     <section className="profile-view">
       <article className="profile-hero-card">
         <div className="profile-avatar-large">{firstName[0]}</div>
-        <div className="profile-identity"><p className="kicker">Learner profile</p><h2>{name}</h2><span>Curious learner · Member since January 2026</span><div><em>1,240 points</em><em>12 day streak</em><em>24 books</em></div></div>
+        <div className="profile-identity"><p className="kicker">Learner profile</p><h2>{name}</h2><span>Curious learner · Member since {new Date().toLocaleString("default", { month: "long", year: "numeric" })}</span><div><em>{bookCount * 80} points</em><em>{bookCount > 0 ? `${bookCount} book${bookCount > 1 ? "s" : ""}` : "No books yet"}</em></div></div>
         <button type="button">Edit profile</button>
       </article>
 
@@ -3546,9 +4792,7 @@ function ProfileView({ name }: { name: string }) {
           <div className="detail-card-title"><span>P</span><div><p className="kicker">About you</p><h3>Personal details</h3></div><button type="button">Edit</button></div>
           <dl>
             <div><dt>Full name</dt><dd>{name}</dd></div>
-            <div><dt>Email address</dt><dd>{firstName.toLowerCase()}@example.com</dd></div>
-            <div><dt>Age</dt><dd>21 years</dd></div>
-            <div><dt>Location</dt><dd>Bengaluru, India</dd></div>
+            <div><dt>Email address</dt><dd>{email || `${firstName.toLowerCase()}@college.edu`}</dd></div>
             <div><dt>Learning goal</dt><dd>30 minutes daily</dd></div>
           </dl>
         </article>
@@ -3592,7 +4836,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: () =
   return <button className={`setting-toggle ${checked ? "on" : ""}`} type="button" role="switch" aria-checked={checked} aria-label={label} onClick={onChange}><span /></button>;
 }
 
-function SettingsView({ name }: { name: string }) {
+function SettingsView({ name, email }: { name: string; email: string }) {
   const [section, setSection] = useState("Learning");
   const [settings, setSettings] = useState({
     daily: true,
@@ -3616,7 +4860,7 @@ function SettingsView({ name }: { name: string }) {
         </nav>
 
         <div className="settings-panels">
-          {section === "Account" && <article className="settings-card"><div className="settings-card-heading"><div><h3>Account information</h3><p>Update the details connected to your Aarva account.</p></div><span className="settings-avatar">{name[0]}</span></div><div className="settings-fields"><label>Full name<input defaultValue={name} /></label><label>Email address<input type="email" defaultValue={`${name.split(" ")[0].toLowerCase()}@example.com`} /></label><label>Current password<input type="password" placeholder="Enter current password" /></label><label>New password<input type="password" placeholder="Create a new password" /></label></div><div className="danger-zone"><div><b>Delete account</b><small>Permanently remove your profile and learning data.</small></div><button type="button">Delete account</button></div></article>}
+          {section === "Account" && <article className="settings-card"><div className="settings-card-heading"><div><h3>Account information</h3><p>Update the details connected to your Aarva account.</p></div><span className="settings-avatar">{name[0]}</span></div><div className="settings-fields"><label>Full name<input defaultValue={name} /></label><label>Email address<input type="email" defaultValue={email || `${name.split(" ")[0].toLowerCase()}@college.edu`} /></label><label>Current password<input type="password" placeholder="Enter current password" /></label><label>New password<input type="password" placeholder="Create a new password" /></label></div><div className="danger-zone"><div><b>Delete account</b><small>Permanently remove your profile and learning data.</small></div><button type="button">Delete account</button></div></article>}
 
           {section === "Learning" && <><article className="settings-card"><div className="settings-card-heading"><div><h3>Learning preferences</h3><p>Personalize your goals and the way recommendations are created.</p></div></div><div className="settings-fields"><label>Daily study goal<select defaultValue="30 minutes"><option>15 minutes</option><option>30 minutes</option><option>1 hour</option><option>2+ hours</option></select></label><label>Preferred study time<select defaultValue="Evening"><option>Morning</option><option>Afternoon</option><option>Evening</option></select></label><label>Question difficulty<select defaultValue="Adaptive"><option>Easy</option><option>Intermediate</option><option>Advanced</option><option>Adaptive</option></select></label><label>Weekly target<select defaultValue="5 days"><option>3 days</option><option>5 days</option><option>Every day</option></select></label></div></article><article className="settings-card"><div className="settings-card-heading"><div><h3>Smart learning</h3><p>Choose how Aarva supports your progress.</p></div></div><div className="setting-list"><div><span><b>Personalized recommendations</b><small>Suggest books and concepts based on your activity.</small></span><Toggle checked={settings.recommendations} onChange={() => update("recommendations")} label="Personalized recommendations" /></div><div><span><b>Study streaks</b><small>Keep track of consecutive learning days.</small></span><Toggle checked={settings.streaks} onChange={() => update("streaks")} label="Study streaks" /></div><div><span><b>Answer sounds</b><small>Play subtle feedback sounds during tests.</small></span><Toggle checked={settings.sounds} onChange={() => update("sounds")} label="Answer sounds" /></div></div></article></>}
 
@@ -3635,15 +4879,50 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
   const [active, setActive] = useState("Dashboard");
   const [selectedBook, setSelectedBook] = useState<LearningBook | null>(null);
-  const [startedTests, setStartedTests] = useState<Set<number>>(new Set());
+  const [startedTests, setStartedTests] = useState<Set<number>>(() => {
+    try {
+      const saved = localStorage.getItem("aarva_started_tests");
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const [completedTests, setCompletedTests] = useState<Set<number>>(() => {
+    try {
+      const saved = localStorage.getItem("aarva_completed_tests");
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
   const [books, setBooks] = useState<LearningBook[]>([]);
   const [booksLoading, setBooksLoading] = useState(true);
-  const firstName = name.split(" ")[0];
+  const firstName = name.split(" ")[0] || "there";
+
+  const handleStartTest = (b: LearningBook) => {
+    setStartedTests((prev) => {
+      const next = new Set(prev).add(b.id);
+      try { localStorage.setItem("aarva_started_tests", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
+
+  const handleCompleteTest = (b: LearningBook) => {
+    setCompletedTests((prev) => {
+      const next = new Set(prev).add(b.id);
+      try { localStorage.setItem("aarva_completed_tests", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
+
+  // Read the stored user object once — used for user-specific data throughout
+  const storedUser = (() => { try { return JSON.parse(localStorage.getItem("aarva_user") || "null"); } catch { return null; } })();
+  const userEmail: string = storedUser?.email || "";
 
   // ── Load books from API ──────────────────────────────────────────────────
   const loadBooks = async () => {
-    const user = (() => { try { return JSON.parse(localStorage.getItem("aarva_user") || "null"); } catch { return null; } })();
-    const userId = user?.id || 6;
+    const userId = storedUser?.id;
+    if (!userId) { setBooksLoading(false); return; } // no user → empty library
     setBooksLoading(true);
     try {
       const data: LearningBook[] = await apiFetch(`/api/textbooks/?user_id=${userId}`);
@@ -3678,7 +4957,7 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
   };
 
   const openBook = (book: LearningBook) => { selectBookAndSave(book); setActive("Upload"); };
-  const startTest = (book: LearningBook) => { selectBookAndSave(book); setStartedTests((c) => new Set(c).add(book.id)); setActive("Tests"); };
+  const startTest = (book: LearningBook) => { selectBookAndSave(book); handleStartTest(book); setActive("Tests"); };
   const goUpload = () => { setActive("Upload"); };
 
   return (
@@ -3743,7 +5022,7 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
             <h1>{active}</h1>
           </div>
           <div className="top-actions">
-            <div className="points"><Icon name="spark" size={16} /><span><b>1,240</b><small>points</small></span></div>
+            <div className="points"><Icon name="spark" size={16} /><span><b>{books.length * 80}</b><small>points</small></span></div>
             <button className="notification" type="button" aria-label="Notifications"><MiniIcon name="bell" /><i /></button>
             <button className="profile-chip" type="button" onClick={() => setActive("Profile")}><span>{firstName[0]}</span><span><b>{firstName}</b><small>Curious learner</small></span></button>
           </div>
@@ -3841,24 +5120,30 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
             book={selectedBook ?? (books[0] ?? { id: 0, title: "Pick a book first", author: "", concepts: [] })}
             books={books}
             started={startedTests}
-            onStarted={(b) => setStartedTests((c) => new Set(c).add(b.id))}
+            completed={completedTests}
+            onStarted={handleStartTest}
+            onCompleted={handleCompleteTest}
+            onSelectBook={selectBookAndSave}
           />
         )}
-        {active === "Settings" && <SettingsView name={name} />}
-        {active === "Profile" && <ProfileView name={name} />}
+        {active === "Settings" && <SettingsView name={name} email={userEmail} />}
+        {active === "Profile" && <ProfileView name={name} email={userEmail} bookCount={books.length} />}
       </main>
     </div>
   );
 }
 
 export default function App() {
-  // Restore auth state from localStorage on mount
-  const storedUser = (() => {
-    try { return JSON.parse(localStorage.getItem("aarva_user") || "null"); } catch { return null; }
-  })();
-  const hasToken = Boolean(localStorage.getItem("aarva_token"));
+  // Restore auth state from localStorage on mount — keep as reactive state
+  const [userName, setUserName] = useState<string>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("aarva_user") || "null");
+      return stored?.name || "";
+    } catch { return ""; }
+  });
 
   const getInitialRoute = (): Route => {
+    const hasToken = Boolean(localStorage.getItem("aarva_token"));
     const path = window.location.pathname;
     if (path === "/login") return "auth";
     if (path === "/dashboard" && hasToken) return "dashboard";
@@ -3867,7 +5152,6 @@ export default function App() {
   };
 
   const [route, setRoute] = useState<Route>(getInitialRoute);
-  const [userName, setUserName] = useState<string>(storedUser?.name || "Alex Morgan");
 
   const navigate = (next: Route) => {
     const path = next === "landing" ? "/" : `/${next === "auth" ? "login" : "dashboard"}`;
@@ -3890,6 +5174,12 @@ export default function App() {
     navigate("landing");
   };
 
+  const handleLoginNav = () => {
+    // Always read token fresh at click time — avoids stale closure bugs
+    const hasToken = Boolean(localStorage.getItem("aarva_token"));
+    navigate(hasToken ? "dashboard" : "auth");
+  };
+
   useEffect(() => {
     const syncRoute = () => {
       const path = window.location.pathname;
@@ -3903,5 +5193,5 @@ export default function App() {
 
   if (route === "auth") return <AuthPage onHome={() => navigate("landing")} onComplete={(name) => { setUserName(name); navigate("dashboard"); }} />;
   if (route === "dashboard") return <Dashboard name={userName} onHome={handleLogout} />;
-  return <LandingPage onStart={() => navigate("auth")} onLogin={() => { if (hasToken) { navigate("dashboard"); } else { navigate("auth"); } }} />;
+  return <LandingPage onStart={() => navigate("auth")} onLogin={handleLoginNav} />;
 }
