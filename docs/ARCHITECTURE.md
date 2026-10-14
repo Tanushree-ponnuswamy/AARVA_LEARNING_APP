@@ -218,63 +218,91 @@ sequenceDiagram
 
 ---
 
-## 4. Tech Stack & Libraries — Detailed Notes
+## 4. Tech Stack & Libraries — Detailed Architectural Specification
 
-### A. Frontend Architecture & Libraries (`frontend/package.json`)
+### A. Core Architectural Tech Stack Table
 
-| Package / Library | Version | Category | Purpose & Key Role in AARVA |
+| Layer / Domain | Technology | Type / Specification | Role in AARVA |
 | :--- | :--- | :--- | :--- |
-| **`react`** | `^19.0.0` | UI Core | Modern UI library powering component hierarchy, state reactivity, hooks, and virtual DOM diffing. |
-| **`react-dom`** | `^19.0.0` | DOM Renderer | React renderer responsible for mounting and rendering components to the browser DOM. |
-| **`typescript`** | `^5.7.0` | Language / Typing | Strict static typing for all frontend interfaces, props, API response models, and state schemas. |
-| **`vite`** | `^8.0.5` | Bundler / Dev Server | High-performance build tool with Native ESM dev server and Lightning-fast Hot Module Replacement (HMR). |
-| **`@vitejs/plugin-react`**| `^6.0.0` | Vite Plugin | Fast Refresh and JSX transformation support for React 19 within Vite. |
-| **`tailwindcss`** | `^4.0.0` | Styling Engine | Modern CSS framework providing utility-first classes, CSS variables, dark mode styling, and responsive layout grids. |
-| **`@tailwindcss/vite`** | `^4.0.0` | Vite Integration | Official Tailwind v4 Vite plugin for zero-configuration CSS compilation directly in the build pipeline. |
-| **`pdfjs-dist`** | `^6.4.299` | Document Rendering | Mozilla PDF.js client library for parsing, loading, and rendering PDF documents canvas-by-canvas in the browser viewer. |
-| **`mammoth`** | `^1.13.0` | Document Conversion | Client-side Word `.docx` to HTML converter for instant document previews without server trips. |
-| **`xlsx`** | `^0.18.5` | Tabular Data | SheetJS library for parsing and rendering Excel spreadsheets (`.xlsx` / `.xls`) directly into interactive tables. |
-| **`react-markdown`** | `^10.1.0` | Content Rendering | Markdown parser and renderer used to display structured AI notes, formatted explanations, and latex/code blocks. |
-| **`oxfmt`** | `^0.2.0` | Code Quality | Ultra-fast Rust-based code formatter for maintaining consistent formatting across TypeScript and CSS files. |
-| **`@types/node`** | `^22.0.0` | Type Definitions | TypeScript types for Node.js APIs used in Vite config scripts. |
-| **`@types/react`** | `^19.0.0` | Type Definitions | TypeScript typings for React 19 component interfaces and standard React hooks. |
-| **`@types/react-dom`** | `^19.0.0` | Type Definitions | TypeScript typings for React DOM entry points and root mounting methods. |
+| **Frontend Framework** | **React 19** | SPA (Component Hierarchy & State) | Reactive component tree, custom hooks, and virtual DOM diffing in `App.tsx` |
+| **Language** | **TypeScript 5.7** | Static Typing | Strict typing across interfaces, props, models, and API responses |
+| **Styling Engine** | **Tailwind CSS v4** + Vanilla CSS | Modern CSS System | Glassmorphism UI, design tokens, CSS variables, and responsive layout |
+| **Build Tool & Bundler** | **Vite 8** | Dev Server & Bundler | Lightning-fast Native ESM dev server and production builder |
+| **Backend Framework** | **FastAPI** | Asynchronous Web Framework | High-performance Python 3.10+ REST API with auto-generated OpenAPI docs (`/docs`) |
+| **ASGI Server** | **Uvicorn** | Asynchronous Server | High-throughput server running on `uvloop` and `httptools` |
+| **Database & ORM** | **PostgreSQL / SQLite** + **SQLAlchemy 2.0** | Relational DB & ORM | Persistent storage for users, sessions, textbooks, quizzes, and chat messages |
+| **Vector Store** | **ChromaDB** | Embedded Vector Database | Persistent local vector store (`./chroma_db`) with cosine distance indexing |
+| **Retrieval Architecture**| **Hybrid RAG (Dense + BM25 + RRF)** | Retrieval Engine | Reciprocal Rank Fusion (`k=60`) merging ChromaDB vector search + BM25 lexical search |
+| **LLM Inference Engine** | **Ollama** | Local AI Host | Local model execution engine (`http://localhost:11434`) with zero API cost |
+| **Large Language Models** | **Qwen3 8B**, **Llama 3**, **Mistral** | Generative AI | Multi-turn AI tutor chat, 5-mode summarization, and adaptive quiz generation |
+| **Embedding Model** | **BGE-Large** (`bge-large:latest`) | Dense Semantic Embedding | 1024-dimensional dense semantic vectors for ChromaDB indexing |
+| **Document Preview** | **Multi-Format In-Browser Preview** | Client Rendering | In-browser rendering of PDF canvas, Word HTML, and Excel interactive tables |
+| **OCR & Vision** | **EasyOCR** + **Tesseract OCR** | Optical Character Recognition | Scanned document and image text extraction supporting 80+ languages |
+| **Voice / Speech** | **Web Speech API** | Browser Native Voice | SpeechRecognition (STT voice-to-text) and SpeechSynthesis (TTS voice readout) |
+| **Auth & Security** | **JWT (HS256)** + **Bcrypt** | Token Auth & Hashing | Stateless Bearer token auth and 12-round salted password hashing |
+| **Mail / SMTP** | **Gmail SMTP (TLS:587)** | Email Dispatch | 4-digit verification OTP transmission and password reset flows |
 
 ---
 
-### B. Backend Architecture & Libraries (`backend/requirements.txt`)
+### B. Document Preview Engines & Libraries Table
 
-#### 1. Core API & Web Framework
-* **`fastapi` (`>=0.110.0`)**: High-performance, async-native Python web framework based on Starlette and Pydantic. Handles all REST endpoints, file streaming, dependency injection (DB sessions, auth guards), and auto-generates OpenAPI documentation (`/docs`).
-* **`uvicorn` (`>=0.28.0`)**: Lightning-fast ASGI server implementation using `uvloop` and `httptools` to serve FastAPI concurrently under heavy load.
-* **`pydantic` (`>=2.6.0`)**: Data validation and serialization using Python type annotations. Powers request/response schemas, type coercion, and environment settings.
-* **`python-multipart` (`>=0.0.9`)**: Streaming parser for `multipart/form-data` uploads, enabling efficient handling of multi-megabyte document uploads (`.pdf`, `.docx`, `.xlsx`, `.txt`).
+| Document Type | Preview Library / Package | Version | Rendering Method & User Experience |
+| :--- | :--- | :--- | :--- |
+| **PDF Documents (`.pdf`)** | **`pdfjs-dist`** | `^6.4.299` | Mozilla PDF.js client engine parses binary streams and renders pages onto HTML5 canvas with page navigation |
+| **Word Documents (`.docx`)** | **`mammoth`** | `^1.13.0` | Client-side parser converts Word `.docx` structures directly to sanitized HTML for instant in-browser reading |
+| **Excel Spreadsheets (`.xlsx`, `.xls`)** | **`xlsx` (SheetJS)** | `^0.18.5` | In-browser spreadsheet parser converts sheets and workbooks into interactive, scrollable HTML data tables |
+| **Markdown & AI Notes (`.md`)** | **`react-markdown`** | `^10.1.0` | Client markdown parser rendering bold key terms, headings, bullet lists, code blocks, and formatted study guides |
+| **Plain Text (`.txt`, `.csv`, `.rst`)** | Native Browser Reader | Native | Streaming text decoder rendering plain text files with preserved line breaks and formatting |
 
-#### 2. Database & ORM
-* **`sqlalchemy` (`>=2.0.28`)**: Python SQL toolkit and Object Relational Mapper (ORM) using modern 2.0 declarative models (`mapped_column`). Manages user accounts, textbooks, bookmarks, chat history, quiz submissions, and analytics records.
-* **`psycopg2-binary` (`>=2.9.9`)**: PostgreSQL database adapter for production relational storage.
-* **`pg8000` (`>=1.31.0`)**: Pure-Python PostgreSQL driver providing an alternative, lightweight interface for environments without precompiled C extensions.
-* **`sqlite3` (Built-in)**: Zero-configuration default local database driver (`sqlite:///./aarva.db`) for lightweight development and offline environments.
+---
 
-#### 3. Vector Database & Hybrid Retrieval
-* **`chromadb` (`>=0.4.24`)**: Embedded, open-source vector database configured with local persistence (`./chroma_db`). Stores dense vector embeddings of text chunks along with metadata (book ID, page number, chapter, chunk index) using cosine distance.
-* **`rank-bm25` (`>=0.2.2`)**: Pure-Python implementation of BM25 (Okapi BM25) lexical ranking algorithms. Powers sparse keyword retrieval, which is combined with dense vector retrieval via Reciprocal Rank Fusion (RRF).
+### C. Large Language Models (LLM) & AI Intelligence Table
 
-#### 4. Authentication & Security
-* **`python-jose[cryptography]` (`>=3.3.0`)**: JavaScript Object Signing and Encryption (JOSE) implementation for generating and validating signed JWT access tokens (HS256).
-* **`passlib[bcrypt]` (`>=1.7.4`)**: Password hashing library using the bcrypt algorithm (12 rounds) with automatic salting to protect user credentials.
+| Model / Service | Identifier / URI | Model Type | Parameters & Config | Role in AARVA |
+| :--- | :--- | :--- | :--- | :--- |
+| **Qwen3 8B** | `qwen3:8b` (via Ollama) | **Primary LLM** | 8B parameters, `temperature=0.3`, `max_tokens=1024`, `timeout=45s` | Generates 5-mode document summaries, multi-turn RAG AI tutor responses, and adaptive quiz questions |
+| **Llama 3** | `llama3:latest` (via Ollama) | **Fallback LLM** | 8B parameters, `temperature=0.3`, `max_tokens=1024` | Automatic secondary model invoked if Qwen3 is not pulled or Ollama returns an error |
+| **Mistral** | `mistral:latest` (via Ollama) | **Fallback LLM** | 7B parameters, `temperature=0.3`, `max_tokens=1024` | Tertiary fallback conversational model for fast summarization |
+| **BGE-Large** | `bge-large:latest` (via Ollama) | **Embedding Model** | 1024-dimensional dense semantic vector output | Converts semantic text chunks into vector embeddings stored in ChromaDB for cosine search |
+| **Ollama Daemon** | `http://localhost:11434` | **Local AI Server** | GPU/CPU local inference server | Manages weights, context windows, and provides REST endpoints (`/api/generate`, `/api/embeddings`) |
 
-#### 5. Document Parsing & Ingestion
-* **`PyMuPDF` (`fitz` `>=1.24.0`)**: Ultra-fast C-backed PDF parser used for high-speed page-by-page text extraction, layout reading, and metadata retrieval.
-* **`pdfplumber` (`>=0.11.0`)**: Precise PDF inspection engine used as a fallback for complex multi-column layouts and structured table extraction.
-* **`python-docx` (`>=1.1.0`)**: Extracts paragraphs, headings, bullet lists, and tables from Microsoft Word (`.docx`) files.
-* **`mammoth` (`>=1.6.0`)**: Converts Word `.docx` documents to clean semantic HTML and plain text with minimal formatting noise.
-* **`openpyxl` (`>=3.1.2`)**: Reads Microsoft Excel (`.xlsx` / `.xls`) workbooks and sheets, formatting cell contents into structured markdown tables for RAG ingestion.
-* **`Pillow` (`>=10.3.0`)**: Python Imaging Library (PIL Fork) for opening, resizing, contrast-adjusting, and preprocessing image scans before OCR.
-* **`pytesseract` (`>=0.3.10`)**: Wrapper for Google Tesseract OCR engine, extracting plain text from scanned document images and handwritten notes.
-* **`easyocr` (`>=1.7.1`)**: Deep learning-based optical character recognition supporting 80+ languages, operating as a standalone OCR fallback without external system dependencies.
-* **`chardet` (`>=5.2.0`)**: Universal character encoding detector for accurately reading legacy plain-text files (UTF-8, Latin-1, Windows-1252, ASCII).
+---
 
-#### 6. Networking & AI Service Integrations
-* **`requests` (`>=2.31.0`)**: Standard HTTP client for communicating with the local Ollama daemon (`http://localhost:11434`) for embedding generation (`bge-large`) and LLM chat/quiz generation (`qwen3:8b`).
-* **`smtplib` / `email` (Built-in)**: Standard library modules configuring secure TLS email delivery (`smtp.gmail.com:587`) for OTP verification, password resets, and test report summaries.
+### D. Libraries & Dependencies Inventory Table (Complete Catalog)
+
+| Library / Package | Version | Layer | Category | What It Does & Key Role in AARVA |
+| :--- | :--- | :--- | :--- | :--- |
+| **`pdfjs-dist`** | `^6.4.299` | Frontend | **Document Preview** | Parses PDF binary files and renders pages onto HTML5 canvas in the left workspace pane |
+| **`mammoth`** | `^1.13.0` | Frontend | **Document Preview** | Converts Microsoft Word `.docx` documents to clean HTML previews |
+| **`xlsx`** | `^0.18.5` | Frontend | **Document Preview** | SheetJS library parsing Excel workbooks into interactive data tables |
+| **`react-markdown`** | `^10.1.0` | Frontend | **Content Rendering** | Markdown parser rendering AI responses, study takeaways, and concept explanations |
+| **`react`** | `^19.0.0` | Frontend | **Core UI** | Component hierarchy, custom hooks, and virtual DOM diffing |
+| **`react-dom`** | `^19.0.0` | Frontend | **Core UI** | Client-side DOM mounting and reconciliation |
+| **`typescript`** | `^5.7.0` | Frontend | **Language** | Static typing across components, models, and API response schemas |
+| **`vite`** | `^8.0.5` | Frontend | **Tooling / Bundler** | Native ESM dev server and production builder |
+| **`@vitejs/plugin-react`** | `^6.0.0` | Frontend | **Tooling** | React 19 Fast Refresh and JSX transformation |
+| **`tailwindcss`** | `^4.0.0` | Frontend | **Styling** | Utility-first CSS engine powering glassmorphism design and responsive layout |
+| **`@tailwindcss/vite`** | `^4.0.0` | Frontend | **Styling** | Direct Tailwind v4 Vite compilation plugin |
+| **`oxfmt`** | `^0.2.0` | Frontend | **Code Quality** | Ultra-fast Rust-based code formatter |
+| **`fastapi`** | `>=0.110.0` | Backend | **API Framework** | Async REST web router with Pydantic validation and automatic OpenAPI Swagger docs |
+| **`uvicorn`** | `>=0.28.0` | Backend | **ASGI Server** | High-throughput server running the FastAPI app on `0.0.0.0:8000` |
+| **`pydantic`** | `>=2.6.0` | Backend | **Data Validation** | Schema validation, type enforcement, and settings management |
+| **`python-multipart`** | `>=0.0.9` | Backend | **File Upload** | Streaming multipart form parser for multi-megabyte document uploads |
+| **`sqlalchemy`** | `>=2.0.28` | Backend | **ORM / Database** | Declarative SQL models for users, sessions, textbooks, quizzes, and chat history |
+| **`psycopg2-binary`** | `>=2.9.9` | Backend | **Database Driver** | C-optimized PostgreSQL database driver |
+| **`pg8000`** | `>=1.31.0` | Backend | **Database Driver** | Pure-Python PostgreSQL driver fallback |
+| **`chromadb`** | `>=0.4.24` | Backend | **Vector Database** | Embedded vector database (`./chroma_db`) storing 1024-dim dense embeddings |
+| **`rank-bm25`** | `>=0.2.2` | Backend | **Lexical Search** | BM25 Okapi lexical sparse ranking for hybrid keyword retrieval |
+| **`requests`** | `>=2.31.0` | Backend | **LLM Integration** | HTTP client sending queries and embeddings requests to Ollama |
+| **`python-jose[crypto]`** | `>=3.3.0` | Backend | **Auth & Security** | JWT generation, HS256 signing, and Bearer token verification |
+| **`passlib[bcrypt]`** | `>=1.7.4` | Backend | **Auth & Security** | 12-round salted bcrypt password hashing |
+| **`PyMuPDF` (`fitz`)** | `>=1.24.0` | Backend | **Document Parsing** | Fast C-backed PDF text and page extraction |
+| **`pdfplumber`** | `>=0.11.0` | Backend | **Document Parsing** | Layout-aware fallback for multi-column pages and structured tables |
+| **`python-docx`** | `>=1.1.0` | Backend | **Document Parsing** | Extracts paragraphs, headings, bullet lists, and tables from `.docx` files |
+| **`mammoth`** | `>=1.6.0` | Backend | **Document Parsing** | Word `.doc`/`.docx` text extraction fallback |
+| **`openpyxl`** | `>=3.1.2` | Backend | **Document Parsing** | Excel `.xlsx`/`.xls` workbook and sheet tabular cell parser |
+| **`chardet`** | `>=5.2.0` | Backend | **Document Parsing** | Universal character encoding detector for plain text files |
+| **`Pillow`** | `>=10.3.0` | Backend | **Vision / OCR** | Image loading, resizing, grayscale conversion, and contrast enhancement |
+| **`pytesseract`** | `>=0.3.10` | Backend | **Vision / OCR** | Tesseract OCR wrapper for text extraction from images |
+| **`easyocr`** | `>=1.7.1` | Backend | **Vision / OCR** | Standalone deep learning OCR supporting 80+ languages |
+
