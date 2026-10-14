@@ -1576,6 +1576,13 @@ interface LearningBook {
   uploaded_at?: string;
 }
 
+interface StudyTask {
+  id: string;
+  text: string;
+  duration: string;
+  completed: boolean;
+}
+
 // palette cycles for dynamic book cards
 const COVER_COLORS = ["violet", "blue", "blush", "lavender", "teal"] as const;
 
@@ -4919,6 +4926,63 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
   const storedUser = (() => { try { return JSON.parse(localStorage.getItem("aarva_user") || "null"); } catch { return null; } })();
   const userEmail: string = storedUser?.email || "";
 
+  // ── Study Plan & Task Management ──
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [newTaskText, setNewTaskText] = useState("");
+  const [newTaskDuration, setNewTaskDuration] = useState("30 min");
+  const [customTasks, setCustomTasks] = useState<StudyTask[]>(() => {
+    try {
+      const uId = storedUser?.id;
+      if (!uId) return [];
+      const saved = localStorage.getItem(`aarva_tasks_${uId}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleAddTask = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = newTaskText.trim();
+    if (!trimmed) return;
+    const newTask: StudyTask = {
+      id: "task_" + Date.now(),
+      text: trimmed,
+      duration: newTaskDuration,
+      completed: false,
+    };
+    setCustomTasks((prev) => {
+      const updated = [newTask, ...prev];
+      if (storedUser?.id) {
+        try { localStorage.setItem(`aarva_tasks_${storedUser.id}`, JSON.stringify(updated)); } catch {}
+      }
+      return updated;
+    });
+    setNewTaskText("");
+    setShowAddTask(false);
+  };
+
+  const handleToggleTask = (taskId: string) => {
+    setCustomTasks((prev) => {
+      const updated = prev.map((t) => (t.id === taskId ? { ...t, completed: !t.completed } : t));
+      if (storedUser?.id) {
+        try { localStorage.setItem(`aarva_tasks_${storedUser.id}`, JSON.stringify(updated)); } catch {}
+      }
+      return updated;
+    });
+  };
+
+  const handleDeleteTask = (taskId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCustomTasks((prev) => {
+      const updated = prev.filter((t) => t.id !== taskId);
+      if (storedUser?.id) {
+        try { localStorage.setItem(`aarva_tasks_${storedUser.id}`, JSON.stringify(updated)); } catch {}
+      }
+      return updated;
+    });
+  };
+
   // ── Load books from API ──────────────────────────────────────────────────
   const loadBooks = async () => {
     const userId = storedUser?.id;
@@ -5049,21 +5113,115 @@ function Dashboard({ name, onHome }: { name: string; onHome: () => void }) {
           </div>
 
           <article className="study-plan">
-            <div className="card-title"><div><p className="kicker">Your focus</p><h3>Today&apos;s study plan</h3></div><button type="button">+ Add task</button></div>
+            <div className="card-title">
+              <div>
+                <p className="kicker">Your focus</p>
+                <h3>Today&apos;s study plan</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddTask((prev) => !prev)}
+                style={{
+                  background: showAddTask ? "rgba(116, 88, 245, 0.12)" : "var(--violet)",
+                  color: showAddTask ? "var(--violet-deep)" : "#ffffff",
+                  border: showAddTask ? "1px solid rgba(116, 88, 245, 0.25)" : "none",
+                  padding: "0.45rem 0.85rem",
+                  borderRadius: "0.6rem",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.3rem",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                {showAddTask ? "✕ Close" : "+ Add task"}
+              </button>
+            </div>
+
+            {showAddTask && (
+              <form onSubmit={handleAddTask} className="add-task-form">
+                <input
+                  type="text"
+                  placeholder="e.g. Read Chapter 2 & practice 15 quiz questions..."
+                  value={newTaskText}
+                  onChange={(e) => setNewTaskText(e.target.value)}
+                  autoFocus
+                  className="add-task-input"
+                />
+                <div className="add-task-controls">
+                  <select
+                    value={newTaskDuration}
+                    onChange={(e) => setNewTaskDuration(e.target.value)}
+                    className="add-task-duration"
+                  >
+                    <option value="15 min">15 min</option>
+                    <option value="30 min">30 min</option>
+                    <option value="45 min">45 min</option>
+                    <option value="1 hour">1 hour</option>
+                    <option value="2+ hours">2+ hours</option>
+                  </select>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button type="submit" className="add-task-submit">Add Task</button>
+                    <button type="button" onClick={() => setShowAddTask(false)} className="add-task-cancel">Cancel</button>
+                  </div>
+                </div>
+              </form>
+            )}
+
             <div className="plan-list">
-              {books.length > 0
-                ? books.slice(0, 3).map((b) => (
-                  <label key={b.id}>
+              {/* Custom user tasks */}
+              {customTasks.map((task) => (
+                <label key={task.id} className={task.completed ? "task-completed" : ""}>
+                  <input
+                    type="checkbox"
+                    checked={task.completed}
+                    onChange={() => handleToggleTask(task.id)}
+                  />
+                  <span style={{ flex: 1 }}>
+                    <b style={{ textDecoration: task.completed ? "line-through" : "none", color: task.completed ? "var(--ink-soft)" : "inherit" }}>
+                      {task.text}
+                    </b>
+                    <small><MiniIcon name="clock" /> {task.duration}</small>
+                  </span>
+                  <button
+                    type="button"
+                    className="plan-list-delete"
+                    onClick={(e) => handleDeleteTask(task.id, e)}
+                    title="Remove task"
+                  >
+                    ✕
+                  </button>
+                </label>
+              ))}
+
+              {/* Book reading suggestions */}
+              {books.slice(0, 3).map((b) => (
+                <label key={`book_${b.id}`}>
+                  <input type="checkbox" />
+                  <span>
+                    <b>Continue reading: {b.title}</b>
+                    <small><MiniIcon name="clock" /> ~30 min</small>
+                  </span>
+                  <em onClick={() => openBook(b)} style={{ cursor: "pointer" }}>Open</em>
+                </label>
+              ))}
+
+              {customTasks.length === 0 && books.length === 0 && (
+                <>
+                  <label>
                     <input type="checkbox" />
-                    <span><b>Continue reading: {b.title}</b><small><MiniIcon name="clock" /> ~30 min</small></span>
-                    <em onClick={() => openBook(b)} style={{ cursor: "pointer" }}>Open</em>
+                    <span><b>Upload your first textbook or notes</b><small><MiniIcon name="clock" /> 5 minutes</small></span>
+                    <em onClick={goUpload} style={{ cursor: "pointer" }}>Start</em>
                   </label>
-                ))
-                : (<>
-                  <label><input type="checkbox" /><span><b>Upload your first textbook</b><small><MiniIcon name="clock" /> 5 minutes</small></span><em onClick={goUpload} style={{ cursor: "pointer" }}>Start</em></label>
-                  <label><input type="checkbox" /><span><b>Complete design systems quiz</b><small><MiniIcon name="clock" /> 20 minutes</small></span><em>Quiz</em></label>
-                </>)
-              }
+                  <label>
+                    <input type="checkbox" />
+                    <span><b>Take an adaptive concept challenge</b><small><MiniIcon name="clock" /> 15 minutes</small></span>
+                    <em onClick={() => setActive("Tests")} style={{ cursor: "pointer" }}>Quiz</em>
+                  </label>
+                </>
+              )}
             </div>
           </article>
 

@@ -3893,6 +3893,115 @@ form button:hover {
   font-style: normal;
 }
 
+/* ── Add Task Form & Controls ── */
+.add-task-form {
+  margin-top: 1rem;
+  padding: 1.1rem;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(116, 88, 245, 0.22);
+  border-radius: 0.9rem;
+  box-shadow: 0 4px 18px rgba(116, 88, 245, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  animation: fadeInDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.add-task-input {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.6rem;
+  border: 1px solid #e2e8f0;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: var(--ink);
+  outline: none;
+  background: #ffffff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.add-task-input:focus {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 3px rgba(116, 88, 245, 0.12);
+}
+
+.add-task-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.add-task-duration {
+  padding: 0.45rem 0.7rem;
+  border-radius: 0.5rem;
+  border: 1px solid #cbd5e1;
+  font-size: 0.78rem;
+  font-family: inherit;
+  background: #f8fafc;
+  color: #334155;
+  outline: none;
+}
+
+.add-task-submit {
+  padding: 0.45rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--violet);
+  color: #ffffff;
+  border: none;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.add-task-submit:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.add-task-cancel {
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid #e2e8f0;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.add-task-cancel:hover {
+  background: #f1f5f9;
+}
+
+.plan-list-delete {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.4rem;
+  transition: color 0.15s, background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plan-list-delete:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.plan-list label.task-completed {
+  opacity: 0.7;
+}
+
 .pending-item {
   padding: 1rem 0;
   display: flex;
