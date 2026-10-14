@@ -1889,10 +1889,10 @@ function PdfJsViewer({
 
         let scaleToUse = zoom;
         if (fitWidth && containerRef.current) {
-          const containerWidth = containerRef.current.clientWidth - 48; // padding
+          const containerWidth = containerRef.current.clientWidth - 32; // 16px padding on each side
           const unscaledViewport = page.getViewport({ scale: 1.0 });
           if (containerWidth > 200 && unscaledViewport.width > 0) {
-            scaleToUse = Math.min(2.5, Math.max(0.6, containerWidth / unscaledViewport.width));
+            scaleToUse = Math.max(0.4, containerWidth / unscaledViewport.width);
           }
         }
 
@@ -2359,41 +2359,55 @@ function FilePreviewPane({
             )}
 
             {(isDocx || isText) && docHtml !== null && (
-              <div style={{ width: '100%', minHeight: '100%', overflow: 'visible', background: '#f3f2f8', padding: '1rem 0.5rem' }}>
+              <div style={{ width: '100%', minHeight: '100%', overflowY: 'auto', overflowX: 'auto', background: '#e2e8f0', padding: '1.5rem 1rem', display: 'flex', justifyContent: 'center' }}>
                 <style>{`
+                  .doc-paper {
+                    box-sizing: border-box;
+                    width: 100%;
+                    max-width: 820px;
+                    background: #ffffff;
+                    padding: 2.5rem 3rem;
+                    border-radius: 4px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06);
+                    font-family: 'Times New Roman', Times, 'Calibri', 'Segoe UI', serif;
+                    font-size: 1.05rem;
+                    line-height: 1.7;
+                    color: #0f172a;
+                    word-wrap: break-word;
+                  }
                   .doc-paper > *:first-child { margin-top: 0 !important; }
-                  .doc-paper p:first-child { margin-top: 0 !important; }
-                  .doc-paper h1:first-child, .doc-paper h2:first-child, .doc-paper h3:first-child { margin-top: 0 !important; }
-                  .doc-paper p { margin: 0.5rem 0; }
-                  .doc-paper table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
-                  .doc-paper td, .doc-paper th { border: 1px solid #cbd5e1; padding: 0.5rem 0.75rem; font-size: 0.88rem; }
+                  .doc-paper h1, .doc-paper h2, .doc-paper h3, .doc-paper h4 {
+                    font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+                    color: #1e293b;
+                    margin: 1.4rem 0 0.6rem 0;
+                    line-height: 1.3;
+                  }
+                  .doc-paper h1 { font-size: 1.6rem; font-weight: 700; border-bottom: 1.5px solid #e2e8f0; padding-bottom: 0.4rem; }
+                  .doc-paper h2 { font-size: 1.35rem; font-weight: 700; }
+                  .doc-paper h3 { font-size: 1.15rem; font-weight: 600; }
+                  .doc-paper p { margin: 0.75rem 0; text-align: justify; text-justify: inter-word; }
+                  .doc-paper ul, .doc-paper ol { margin: 0.6rem 0; padding-left: 2rem; }
+                  .doc-paper li { margin: 0.3rem 0; }
+                  .doc-paper table { border-collapse: collapse; width: 100%; margin: 1.25rem 0; font-size: 0.92rem; }
+                  .doc-paper td, .doc-paper th { border: 1px solid #94a3b8; padding: 0.55rem 0.85rem; text-align: left; }
+                  .doc-paper th { background: #f1f5f9; font-weight: 700; }
+                  .doc-paper blockquote { border-left: 4px solid #94a3b8; margin: 1rem 0; padding: 0.5rem 1rem; color: #475569; background: #f8fafc; font-style: italic; }
+                  .doc-paper pre { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1rem; font-family: 'Courier New', monospace; font-size: 0.88rem; overflow-x: auto; white-space: pre-wrap; }
                 `}</style>
                 <div
                   className="doc-paper"
-                  style={{
-                    maxWidth: '820px',
-                    margin: '0 auto',
-                    background: '#ffffff',
-                    padding: '1.75rem 2.25rem',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)',
-                    minHeight: '600px',
-                    fontFamily: 'Calibri, "Segoe UI", Arial, sans-serif',
-                    lineHeight: 1.65,
-                    fontSize: '0.95rem',
-                    color: '#1e293b'
-                  }}
                   dangerouslySetInnerHTML={{ __html: docHtml }}
                 />
               </div>
             )}
 
             {isXlsx && xlsxHtml !== null && (
-              <div style={{ width: '100%', minHeight: '100%', overflow: 'visible', background: '#f8f7fc', padding: '1rem' }}>
+              <div style={{ width: '100%', minHeight: '100%', overflow: 'auto', background: '#f8fafc', padding: '1rem' }}>
                 <style>{`
-                  .xlsx-sheet table { border-collapse: collapse; width: 100%; background: #fff; border: 1px solid #cbd5e1; }
-                  .xlsx-sheet th { background: #f1f5f9; color: #334155; font-weight: 700; border: 1px solid #cbd5e1; padding: 0.5rem 0.75rem; font-size: 0.82rem; text-align: left; }
-                  .xlsx-sheet td { border: 1px solid #e2e8f0; padding: 0.45rem 0.75rem; font-size: 0.82rem; color: #1e293b; white-space: nowrap; }
+                  .xlsx-sheet { margin-bottom: 1.5rem; background: #ffffff; border-radius: 6px; border: 1px solid #cbd5e1; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+                  .xlsx-sheet table { border-collapse: collapse; width: 100%; background: #ffffff; font-family: 'Segoe UI', Arial, sans-serif; }
+                  .xlsx-sheet th { background: #f1f5f9; color: #1e293b; font-weight: 700; border: 1px solid #cbd5e1; padding: 0.5rem 0.85rem; font-size: 0.82rem; text-align: left; position: sticky; top: 0; }
+                  .xlsx-sheet td { border: 1px solid #e2e8f0; padding: 0.45rem 0.85rem; font-size: 0.82rem; color: #1e293b; white-space: nowrap; font-variant-numeric: tabular-nums; }
                   .xlsx-sheet tr:nth-child(even) { background: #f8fafc; }
                   .xlsx-sheet tr:hover { background: #f1f5f9; }
                 `}</style>
